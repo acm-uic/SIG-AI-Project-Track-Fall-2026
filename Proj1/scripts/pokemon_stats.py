@@ -2,6 +2,9 @@ import requests
 import pandas as pd
 import pathlib
 
+POKEAPI_BASE_URL = "https://pokeapi.co/api/v2"
+POKEMON_ENDPOINT = f"{POKEAPI_BASE_URL}/pokemon"
+EVOLUTION_CHAIN_ENDPOINT = f"{POKEAPI_BASE_URL}/evolution-chain"
 
 POKEAPI_BASE_URL = "https://pokeapi.co/api/v2"
 POKEMON_ENDPOINT = f"{POKEAPI_BASE_URL}/pokemon"
