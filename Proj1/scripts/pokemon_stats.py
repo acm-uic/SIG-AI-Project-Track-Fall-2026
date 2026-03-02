@@ -6,10 +6,19 @@ POKEAPI_BASE_URL = "https://pokeapi.co/api/v2"
 POKEMON_ENDPOINT = f"{POKEAPI_BASE_URL}/pokemon"
 EVOLUTION_CHAIN_ENDPOINT = f"{POKEAPI_BASE_URL}/evolution-chain"
 
+POKEAPI_BASE_URL = "https://pokeapi.co/api/v2"
+POKEMON_ENDPOINT = f"{POKEAPI_BASE_URL}/pokemon"
+EVOLUTION_CHAIN_ENDPOINT = f"{POKEAPI_BASE_URL}/evolution-chain"
+
+
+
+
+
 def get_json(session, url):
     response = session.get(url, timeout=20) # timeout of 20 seconds to avoid hanging requests
     response.raise_for_status()
     return response.json()
+
 
 def extract_terminal_species(chain_node):
     """
@@ -25,6 +34,7 @@ def extract_terminal_species(chain_node):
         terminal_species.extend(extract_terminal_species(next_node))
     return terminal_species
 
+
 def get_all_fully_evolved_species(session):
     """
     Fetches all evolution chains and extracts the species names of fully evolved Pokémon (to be used to get stats and types later)
@@ -39,6 +49,7 @@ def get_all_fully_evolved_species(session):
         fully_evolved_species.update(extract_terminal_species(chain_data["chain"]))
 
     return sorted(fully_evolved_species)
+
 
 def get_pokemon_row(session, pokemon_name):
     """
@@ -69,6 +80,7 @@ def get_pokemon_row(session, pokemon_name):
         "speed": stats.get("speed"),
     }
 
+
 def build_fully_evolved_dataframe():
     """
     Builds a DataFrame of fully evolved Pokémon with their stats and types.
@@ -85,6 +97,7 @@ def build_fully_evolved_dataframe():
     return pd.DataFrame(rows)
 
 if __name__ == "__main__":
+
     # Data Folder: ../data (relative to this script)
     data_folder = pathlib.Path(__file__).resolve().parents[1] / "data"
     if not data_folder.exists():
