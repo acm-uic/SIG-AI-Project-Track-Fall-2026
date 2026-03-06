@@ -1,3 +1,13 @@
 .venv/
 __pycache__/
 *.pyc
+
+# CLI-generated GA run artifacts
+reports/ga_results/run_cli_*/
+reports/ga_results/run_anchor_*/
+reports/ga_results/run_random_*/
+
+# CLI clustering pipeline artifacts
+reports/clustering_analysis/models/
+reports/clustering_analysis/reports/
+reports/clustering_analysis/data/pokemon_with_clusters.csv
