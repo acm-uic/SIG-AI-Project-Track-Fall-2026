@@ -428,8 +428,60 @@ def compute_rarity_bonus(team: pd.DataFrame, config: Dict) -> float:
     bonus = team_rarity * rarity_weight
     
     return float(bonus)
-    
-    return 0.0
+
+
+def compute_composition_bonus(team: pd.DataFrame, config: Dict) -> float:
+    """
+    Reward teams whose archetype counts match a target composition.
+
+    Expected config keys:
+    - fitness.composition_weight: bonus weight (0 disables)
+    - fitness.target_archetype_counts: dict[str, int] summing to team size
+
+    Score uses normalized L1 distance between actual and target counts:
+        score = 1 - (sum |actual_i - target_i|) / (2 * team_size)
+
+    Returns:
+        bonus in [0, composition_weight]
+    """
+    fitness_cfg = config.get('fitness', {})
+    weight = float(fitness_cfg.get('composition_weight', 0.0))
+    target_counts = fitness_cfg.get('target_archetype_counts')
+
+    if weight <= 0 or not isinstance(target_counts, dict) or not target_counts:
+        return 0.0
+
+    team_size = len(team)
+    if team_size <= 0:
+        return 0.0
+
+    actual_counts = team['archetype'].value_counts().to_dict()
+    all_keys = set(actual_counts.keys()) | set(target_counts.keys())
+    l1_distance = float(sum(abs(actual_counts.get(k, 0) - int(target_counts.get(k, 0))) for k in all_keys))
+
+    score = max(0.0, 1.0 - (l1_distance / (2.0 * team_size)))
+    return float(weight * score)
+
+
+def compute_pivot_bonus(team: pd.DataFrame, config: Dict) -> float:
+    """Reward teams that hit a target number of pivot candidates."""
+    fitness_cfg = config.get('fitness', {})
+    weight = float(fitness_cfg.get('pivot_weight', 0.0))
+    target_count = int(fitness_cfg.get('target_pivot_count', 0) or 0)
+    threshold = float(fitness_cfg.get('pivot_threshold', 0.62))
+
+    if weight <= 0 or target_count <= 0 or 'pivot_score' not in team.columns:
+        return 0.0
+
+    pivot_scores = pd.to_numeric(team['pivot_score'], errors='coerce').fillna(0.0).clip(lower=0.0, upper=1.0)
+    candidate_count = int((pivot_scores >= threshold).sum())
+    team_size = max(len(team), 1)
+
+    count_score = max(0.0, 1.0 - (abs(candidate_count - target_count) / team_size))
+    top_n = min(target_count, len(pivot_scores))
+    quality_score = float(pivot_scores.nlargest(top_n).mean()) if top_n > 0 else 0.0
+
+    return float(weight * (0.60 * count_score + 0.40 * quality_score))
 
 
 # ============================================================================
@@ -467,6 +519,8 @@ def evaluate_fitness(team: pd.DataFrame, config: Dict) -> Tuple[float, Dict]:
     weakness_penalty = compute_weakness_penalty(team, config)
     bst_penalty = compute_bst_penalty(team, config)
     rarity_bonus = compute_rarity_bonus(team, config)
+    composition_bonus = compute_composition_bonus(team, config)
+    pivot_bonus = compute_pivot_bonus(team, config)
     
     # Weighted combination
     base_fitness = (
@@ -481,7 +535,9 @@ def evaluate_fitness(team: pd.DataFrame, config: Dict) -> Tuple[float, Dict]:
         imbalance_penalty + 
         weakness_penalty +
         bst_penalty +
-        rarity_bonus
+        rarity_bonus +
+        composition_bonus +
+        pivot_bonus
     )
     
     # Detailed breakdown for analysis
@@ -495,6 +551,8 @@ def evaluate_fitness(team: pd.DataFrame, config: Dict) -> Tuple[float, Dict]:
         'weakness_penalty': weakness_penalty,
         'bst_penalty': bst_penalty,
         'rarity_bonus': rarity_bonus,
+        'composition_bonus': composition_bonus,
+        'pivot_bonus': pivot_bonus,
         'base_fitness': base_fitness
     }
     

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Role discovery module for extracting team roles from GA results.
 """
 

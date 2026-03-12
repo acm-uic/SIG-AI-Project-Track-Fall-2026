@@ -13,10 +13,11 @@ import argparse
 import json
 import subprocess
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 from collections import Counter
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import pandas as pd
 
@@ -29,6 +30,8 @@ from src.ga import PokemonGA, get_config_c
 from src.ga.config import get_config_a, get_config_b, get_config_random
 from src.ga.optimization import load_pokemon_data
 from src.ga.fitness import TYPE_NAMES, get_type_effectiveness
+
+PIVOT_CANDIDATE_THRESHOLD = 0.62
 
 
 def _print_header(title: str) -> None:
@@ -75,6 +78,154 @@ def _safe_input(prompt: str) -> str | None:
         return None
 
 
+def _available_archetypes(pokemon_df: pd.DataFrame) -> List[str]:
+    return sorted(pokemon_df["archetype"].dropna().astype(str).unique().tolist())
+
+
+def _select_anchor_pokemon(pokemon_df: pd.DataFrame) -> List[str]:
+    print("Choose 1-5 anchor Pokemon to lock into the generated team.")
+    anchor_count = _input_int("How many anchors?", 1, 5, 1)
+    anchors: List[str] = []
+
+    for i in range(anchor_count):
+        while True:
+            raw_input = _safe_input(f"Enter anchor Pokemon #{i + 1}: ")
+            if raw_input is None:
+                return []
+            resolved = _resolve_pokemon_name(raw_input.strip(), pokemon_df)
+            if not resolved:
+                print("Pokemon not found. Try again.")
+                continue
+            if resolved in anchors:
+                print("Duplicate anchor. Choose a different Pokemon.")
+                continue
+            anchors.append(resolved)
+            break
+
+    return anchors
+
+
+def _build_composition_presets() -> Dict[str, Dict[str, int]]:
+    return {
+        "balanced": {
+            "Balanced All-Rounder": 2,
+            "Generalist": 2,
+            "Fast Attacker": 1,
+            "Defensive Tank": 1,
+        },
+        "hyper_offense": {
+            "Speed Sweeper": 2,
+            "Fast Attacker": 2,
+            "Physical Attacker": 1,
+            "Generalist": 1,
+        },
+        "pivot_pressure": {
+            "Generalist": 3,
+            "Balanced All-Rounder": 1,
+            "Fast Attacker": 1,
+            "Defensive Tank": 1,
+        },
+        "bulky_offense": {
+            "Defensive Tank": 2,
+            "Balanced All-Rounder": 2,
+            "Fast Attacker": 1,
+            "Physical Attacker": 1,
+        },
+    }
+
+
+def _normalize_composition_counts(raw_counts: Dict[str, int], archetypes: List[str]) -> Dict[str, int]:
+    return {arch: int(raw_counts.get(arch, 0)) for arch in archetypes if int(raw_counts.get(arch, 0)) > 0}
+
+
+def _input_custom_composition(archetypes: List[str]) -> Dict[str, int]:
+    print("\nCustom composition: choose counts for each archetype. Total must equal 6.")
+    while True:
+        remaining = 6
+        chosen: Dict[str, int] = {}
+        for idx, arch in enumerate(archetypes):
+            max_allowed = remaining if idx < len(archetypes) - 1 else remaining
+            value = _input_int(f"  {arch}", 0, max_allowed, 0 if idx < len(archetypes) - 1 else remaining)
+            chosen[arch] = value
+            remaining -= value
+            if remaining <= 0:
+                break
+
+        total = sum(chosen.values())
+        if total == 6:
+            return _normalize_composition_counts(chosen, archetypes)
+        print(f"Total must be 6. You entered {total}. Try again.\n")
+
+
+def _select_composition_target(pokemon_df: pd.DataFrame) -> Tuple[str, Dict[str, int], float]:
+    presets = _build_composition_presets()
+    archetypes = _available_archetypes(pokemon_df)
+
+    print("\nChoose a team composition style:")
+    print("1. Balanced")
+    print("2. Hyper Offense")
+    print("3. Pivot Pressure")
+    print("4. Bulky Offense")
+    print("5. Custom")
+
+    while True:
+        raw = _safe_input("Enter choice [1-5] (default 1): ")
+        if raw is None:
+            return "balanced", presets["balanced"], 0.20
+        choice = raw.strip() or "1"
+        if choice in {"1", "2", "3", "4", "5"}:
+            break
+        print("Invalid choice. Please enter 1-5.")
+
+    if choice == "1":
+        return "balanced", _normalize_composition_counts(presets["balanced"], archetypes), 0.20
+    if choice == "2":
+        return "hyper_offense", _normalize_composition_counts(presets["hyper_offense"], archetypes), 0.22
+    if choice == "3":
+        return "pivot_pressure", _normalize_composition_counts(presets["pivot_pressure"], archetypes), 0.20
+    if choice == "4":
+        return "bulky_offense", _normalize_composition_counts(presets["bulky_offense"], archetypes), 0.20
+
+    custom_counts = _input_custom_composition(archetypes)
+    strictness = _input_int(
+        "Custom composition strictness (%)",
+        5,
+        40,
+        20,
+    )
+    return "custom", custom_counts, float(strictness) / 100.0
+
+
+def _select_team_power_mode() -> Tuple[str, Dict[str, float]]:
+    print("\nChoose a team power mode:")
+    print("1. Standard (recommended): soft BST cap, best overall optimization")
+    print("2. Competitive Strict: fewer high-BST stacks, may reduce peak fitness")
+    print("3. Open: no BST cap, allows full power stacking")
+
+    while True:
+        raw = _safe_input("Enter choice [1-3] (default 1): ")
+        if raw is None:
+            return "standard", {"bst_cap": 3300, "bst_penalty_weight": 2.0}
+        choice = raw.strip() or "1"
+        if choice in {"1", "2", "3"}:
+            break
+        print("Invalid choice. Please enter 1-3.")
+
+    if choice == "1":
+        return "standard", {"bst_cap": 3300, "bst_penalty_weight": 2.0}
+    if choice == "2":
+        return "competitive_strict", {"bst_cap": 3200, "bst_penalty_weight": 3.0}
+    return "open", {"bst_cap": 0, "bst_penalty_weight": 0.0}
+
+
+def _severity_from_issue_score(score: int) -> str:
+    if score >= 8:
+        return "HIGH"
+    if score >= 5:
+        return "MEDIUM"
+    return "LOW"
+
+
 def _run_python_script(script_path: Path, args: List[str] | None = None) -> int:
     cmd = [sys.executable, str(script_path)]
     if args:
@@ -82,6 +233,36 @@ def _run_python_script(script_path: Path, args: List[str] | None = None) -> int:
 
     result = subprocess.run(cmd, cwd=str(PROJ_ROOT), check=False)
     return int(result.returncode)
+
+
+def _write_error_log(exc: Exception) -> Path:
+    """Persist full traceback details for post-mortem debugging."""
+    logs_dir = PROJ_ROOT / "reports" / "error_logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_path = logs_dir / f"cli_error_{timestamp}.log"
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write("Pokemon Team CLI Error Report\n")
+        f.write("=" * 80 + "\n")
+        f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+        f.write(f"Exception: {type(exc).__name__}\n")
+        f.write(f"Message: {exc}\n\n")
+        f.write("Traceback:\n")
+        f.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    return log_path
+
+
+def _run_with_error_guard(label: str, action) -> bool:
+    """Run an interactive action and report concise failure with logged details."""
+    try:
+        action()
+        return True
+    except Exception as exc:
+        log_path = _write_error_log(exc)
+        print(f"\n[ERROR] {label} failed: {type(exc).__name__}: {exc}")
+        print(f"        Full traceback saved to: {log_path.relative_to(PROJ_ROOT)}")
+        print("        Please share this file if you want a targeted fix.")
+        return False
 
 
 def _get_config_by_name(name: str) -> Dict:
@@ -243,12 +424,17 @@ def _get_stat_columns(team_df: pd.DataFrame) -> Dict[str, str]:
 
 
 def _assign_role(row: pd.Series, stat_cols: Dict[str, str]) -> str:
+    archetype = str(row.get("archetype", "")).lower()
     speed = row[stat_cols["speed"]]
     attack = row[stat_cols["attack"]]
     sp_attack = row[stat_cols["sp_attack"]]
     defense = row[stat_cols["defense"]]
     sp_defense = row[stat_cols["sp_defense"]]
     hp = row[stat_cols["hp"]]
+
+    # Respect archetype-level defensive labeling to avoid wall false-negatives.
+    if archetype == "defensive tank":
+        return "wall"
 
     if speed >= 100 and max(attack, sp_attack) >= 100:
         return "sweeper"
@@ -259,6 +445,40 @@ def _assign_role(row: pd.Series, stat_cols: Dict[str, str]) -> str:
     if attack >= 90 and sp_attack >= 90:
         return "mixed"
     return "balanced"
+
+def _build_pivot_reasons(row: pd.Series) -> List[str]:
+    reasons: List[str] = []
+    if float(row.get("pivot_bulk_score", 0.0)) >= 0.65:
+        reasons.append("strong bulk")
+    if float(row.get("pivot_speed_score", 0.0)) >= 0.65:
+        reasons.append("usable speed control")
+    if float(row.get("pivot_offense_score", 0.0)) >= 0.45:
+        reasons.append("threatens progress")
+    if float(row.get("pivot_type_utility_score", 0.0)) >= 0.55:
+        reasons.append("useful defensive typing")
+    if float(row.get("pivot_ability_bonus", 0.0)) > 0:
+        reasons.append("pivot-friendly ability")
+    return reasons or ["balanced stat profile"]
+
+
+def _collect_pivot_candidates(team_df: pd.DataFrame, threshold: float = PIVOT_CANDIDATE_THRESHOLD) -> List[Dict[str, object]]:
+    if "pivot_score" not in team_df.columns:
+        return []
+
+    candidates: List[Dict[str, object]] = []
+    for _, row in team_df.sort_values("pivot_score", ascending=False).iterrows():
+        score = float(row.get("pivot_score", 0.0))
+        if score < threshold:
+            continue
+        candidates.append(
+            {
+                "pokemon": row["name"],
+                "score": score,
+                "style": str(row.get("pivot_style_hint", "hybrid")),
+                "reasons": _build_pivot_reasons(row),
+            }
+        )
+    return candidates
 
 
 def analyze_team_by_names(team_names: List[str], pokemon_df: pd.DataFrame) -> Dict:
@@ -329,6 +549,150 @@ def analyze_team_by_names(team_names: List[str], pokemon_df: pd.DataFrame) -> Di
     if not recommendations:
         recommendations.append("Team looks balanced overall.")
 
+    # Severity issues section (kept separate from recommendations)
+    team_issues: List[Dict[str, str | int]] = []
+    for type_name, count in sorted(weakness_counts.items(), key=lambda item: item[1], reverse=True):
+        if count < 3:
+            continue
+        score = min(10, count * 2)
+        team_issues.append(
+            {
+                "issue": f"{type_name.title()} weakness",
+                "severity": _severity_from_issue_score(score),
+                "score": score,
+                "detail": f"{count}/6 members are weak to {type_name}.",
+            }
+        )
+
+    speed_issue_score = 0
+    if speed_gap >= 100:
+        speed_issue_score = 8
+    elif speed_gap >= 80:
+        speed_issue_score = 6
+    elif speed_gap >= 60:
+        speed_issue_score = 4
+    if stat_averages[stat_cols["speed"]] < 70:
+        speed_issue_score = max(speed_issue_score, 5)
+    if speed_issue_score > 0:
+        team_issues.append(
+            {
+                "issue": "Speed imbalance",
+                "severity": _severity_from_issue_score(speed_issue_score),
+                "score": speed_issue_score,
+                "detail": f"Speed gap={speed_gap}, avg speed={stat_averages[stat_cols['speed']]:.1f}.",
+            }
+        )
+
+    if max_role_count >= 4:
+        role_issue_score = 8
+    elif max_role_count == 3:
+        role_issue_score = 5
+    else:
+        role_issue_score = 0
+    if role_issue_score > 0:
+        dominant_role = role_counts.most_common(1)[0][0]
+        team_issues.append(
+            {
+                "issue": "Role concentration",
+                "severity": _severity_from_issue_score(role_issue_score),
+                "score": role_issue_score,
+                "detail": f"{max_role_count}/6 members classified as {dominant_role}.",
+            }
+        )
+
+    # Defensive synergy map: per-Pokemon weakness coverage by teammates
+    defensive_synergy = []
+    for idx, pokemon in team_df.iterrows():
+        pokemon_name = pokemon["name"]
+        defending_types = [pokemon["type1"]]
+        if pd.notna(pokemon.get("type2")) and pokemon.get("type2"):
+            defending_types.append(pokemon["type2"])
+
+        weak_types = []
+        for attacking_type in TYPE_NAMES:
+            if get_type_effectiveness(attacking_type, defending_types) > 1.0:
+                weak_types.append(attacking_type)
+
+        covered = 0
+        for weak_type in weak_types:
+            covered_by_teammate = False
+            for jdx, teammate in team_df.iterrows():
+                if jdx == idx:
+                    continue
+                teammate_types = [teammate["type1"]]
+                if pd.notna(teammate.get("type2")) and teammate.get("type2"):
+                    teammate_types.append(teammate["type2"])
+                if get_type_effectiveness(weak_type, teammate_types) <= 0.5:
+                    covered_by_teammate = True
+                    break
+            if covered_by_teammate:
+                covered += 1
+
+        total_weak = len(weak_types)
+        coverage_ratio = float(covered / total_weak) if total_weak > 0 else 1.0
+        defensive_synergy.append(
+            {
+                "pokemon": pokemon_name,
+                "covered_weaknesses": covered,
+                "total_weaknesses": total_weak,
+                "coverage_ratio": coverage_ratio,
+            }
+        )
+
+    # Speed tier audit
+    speed_values = team_df[stat_cols["speed"]].astype(float)
+    speed_tiers = {
+        "120+": int((speed_values >= 120).sum()),
+        "100-119": int(((speed_values >= 100) & (speed_values < 120)).sum()),
+        "80-99": int(((speed_values >= 80) & (speed_values < 100)).sum()),
+        "<80": int((speed_values < 80).sum()),
+    }
+
+    # Offensive pressure profile from STAB typing
+    offensive_pressure_counts = Counter()
+    for _, pokemon in team_df.iterrows():
+        attack_types = [pokemon["type1"]]
+        if pd.notna(pokemon.get("type2")) and pokemon.get("type2"):
+            attack_types.append(pokemon["type2"])
+        for target_type in TYPE_NAMES:
+            if any(get_type_effectiveness(atk_type, [target_type]) >= 2.0 for atk_type in attack_types):
+                offensive_pressure_counts[target_type] += 1
+
+    low_pressure_types = [t for t in TYPE_NAMES if offensive_pressure_counts.get(t, 0) == 0]
+    if len(low_pressure_types) >= 4:
+        pressure_score = 6
+        team_issues.append(
+            {
+                "issue": "Low offensive pressure",
+                "severity": _severity_from_issue_score(pressure_score),
+                "score": pressure_score,
+                "detail": "No super-effective STAB pressure into: " + ", ".join(low_pressure_types[:6]),
+            }
+        )
+
+    pivot_candidates = _collect_pivot_candidates(team_df)
+    pivot_series = pd.to_numeric(team_df.get("pivot_score", pd.Series(dtype=float)), errors="coerce")
+    pivot_summary = {
+        "candidate_count": len(pivot_candidates),
+        "top_score": float(pivot_series.max()) if len(pivot_series) else 0.0,
+        "styles": dict(Counter(entry["style"] for entry in pivot_candidates)) if pivot_candidates else {},
+    }
+    if len(pivot_candidates) == 0:
+        team_issues.append(
+            {
+                "issue": "Limited pivot presence",
+                "severity": "MEDIUM",
+                "score": 5,
+                "detail": "No team member cleared the pivot candidate threshold.",
+            }
+        )
+        recommendations.append("Consider adding a bulky momentum piece or flexible switch-in to improve pivot flow.")
+    elif len(pivot_candidates) >= 3:
+        recommendations.append("Pivot depth looks good; the team has multiple workable switch-and-pressure options.")
+
+    # Keep highest-impact items first
+    team_issues = sorted(team_issues, key=lambda item: int(item["score"]), reverse=True)
+
     overall_score = int(type_score * 0.4 + stat_balance_score * 0.3 + role_diversity_score * 0.3)
 
     return {
@@ -351,6 +715,17 @@ def analyze_team_by_names(team_names: List[str], pokemon_df: pd.DataFrame) -> Di
             "entries": roles,
             "diversity_score": int(role_diversity_score),
         },
+        "issues": team_issues,
+        "advanced": {
+            "defensive_synergy": defensive_synergy,
+            "speed_tiers": speed_tiers,
+            "pivot_summary": pivot_summary,
+            "pivot_candidates": pivot_candidates,
+            "offensive_pressure": {
+                "counts": dict(offensive_pressure_counts),
+                "low_pressure_types": low_pressure_types,
+            },
+        },
         "recommendations": recommendations,
         "overall_score": overall_score,
     }
@@ -358,22 +733,19 @@ def analyze_team_by_names(team_names: List[str], pokemon_df: pd.DataFrame) -> Di
 
 def interactive_team_generator() -> None:
     _print_header("MENU 1: TEAM GENERATOR")
-    print("Pick a Pokémon, we'll build a team around it.")
+    print("Pick one or more anchor Pokemon, then choose a team composition style.")
     print()
 
-    pokemon_df = load_pokemon_data()
+    base_pokemon_df = load_pokemon_data()
 
-    # Mandatory: Get 1 anchor Pokémon
-    while True:
-        raw_input = _safe_input("Enter a Pokémon name (your team anchor): ")
-        if raw_input is None:
-            print("Input interrupted. Returning to menu.")
-            return
-        anchor = _resolve_pokemon_name(raw_input.strip(), pokemon_df)
-        if not anchor:
-            print("Pokémon not found. Try again.")
-            continue
-        break
+    anchors = _select_anchor_pokemon(base_pokemon_df)
+    if not anchors:
+        print("Input interrupted. Returning to menu.")
+        return
+
+    composition_name, target_counts, composition_weight = _select_composition_target(base_pokemon_df)
+    power_mode_name, power_mode_cfg = _select_team_power_mode()
+    pokemon_df = base_pokemon_df
 
     # Optional: GA tuning parameters
     print()
@@ -382,25 +754,40 @@ def interactive_team_generator() -> None:
     seed = _input_int("Random seed?", 0, 999999, 42)
     save_outputs = _input_yes_no("Save run artifacts?", default_yes=False)
 
-    print("\nOptimizing team around", anchor, "...")
+    print("\nOptimizing team around:", ", ".join(anchors))
+    print("Composition style:", composition_name.replace("_", " ").title())
+    print("Power mode:", power_mode_name.replace("_", " ").title())
+    if power_mode_name == "competitive_strict":
+        print("Note: Competitive Strict can trade a little peak fitness for healthier team power balance.")
     
     config = get_config_c()
     config["population"]["size"] = population
     config["population"]["generations"] = generations
     config["random_seed"] = seed
-    config["name"] = "Menu_SingleAnchor"
+    config["name"] = f"Menu_{composition_name.title()}"
+    config["fitness"]["composition_weight"] = composition_weight
+    config["fitness"]["target_archetype_counts"] = target_counts
+    config["fitness"]["bst_cap"] = int(power_mode_cfg["bst_cap"])
+    config["fitness"]["bst_penalty_weight"] = float(power_mode_cfg["bst_penalty_weight"])
+    config["fitness"]["pivot_weight"] = 0.0
+    config["fitness"]["target_pivot_count"] = 0
+    config["fitness"]["pivot_threshold"] = PIVOT_CANDIDATE_THRESHOLD
+    if composition_name == "pivot_pressure":
+        config["fitness"]["pivot_weight"] = 0.18
+        config["fitness"]["target_pivot_count"] = 3
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     output_dir = None
     if save_outputs:
-        output_dir = PROJ_ROOT / "reports" / "ga_results" / f"run_anchor_{anchor}_{timestamp}"
+        anchor_tag = "_".join(a.replace(" ", "") for a in anchors[:3])
+        output_dir = PROJ_ROOT / "reports" / "ga_results" / f"run_anchor_{anchor_tag}_{composition_name}_{timestamp}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
     ga = PokemonGA(
         pokemon_df=pokemon_df,
         config=config,
         output_dir=output_dir,
-        locked_pokemon=[anchor],
+        locked_pokemon=anchors,
     )
     history_df = ga.run()
     
@@ -417,7 +804,8 @@ def interactive_team_generator() -> None:
     print(f"RECOMMENDED TEAM (fitness={fitness:.4f})")
     print("=" * 80)
     for idx, (_, pokemon) in enumerate(team_df.iterrows(), 1):
-        t2 = f"/{pokemon['type2']}" if pokemon.get("type2") else ""
+        type2 = pokemon.get("type2")
+        t2 = f"/{type2}" if pd.notna(type2) and str(type2).strip() else ""
         archetype = pokemon.get("archetype", "Unknown")
         # Calculate BST from individual stat columns
         stat_cols = ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
@@ -446,6 +834,43 @@ def interactive_team_generator() -> None:
         print(f"  Balance Score: {analysis['stats']['balance_score']:.1f}/100")
         print(f"\nRoles: {', '.join(f'{role}: {count}' for role, count in analysis['roles']['distribution'].items())}")
         print(f"Role Diversity: {analysis['roles']['diversity_score']}/100")
+        print("\nTeam Issues (Severity):")
+        if analysis["issues"]:
+            for issue in analysis["issues"]:
+                print(f"  {issue['issue']:28s} severity: {issue['severity']:6s} ({issue['detail']})")
+        else:
+            print("  No major issues detected.")
+
+        print("\nAdvanced Snapshot:")
+        speed_tiers = analysis["advanced"]["speed_tiers"]
+        print(
+            "  Speed tiers -> "
+            f"120+: {speed_tiers['120+']}, "
+            f"100-119: {speed_tiers['100-119']}, "
+            f"80-99: {speed_tiers['80-99']}, "
+            f"<80: {speed_tiers['<80']}"
+        )
+        pivot_summary = analysis["advanced"]["pivot_summary"]
+        print(
+            "  Pivot candidates -> "
+            f"count: {pivot_summary['candidate_count']}, "
+            f"top score: {pivot_summary['top_score']:.2f}"
+        )
+        print(
+            f"  Pivot score threshold: {PIVOT_CANDIDATE_THRESHOLD:.2f} "
+            "(bulk + speed + pressure + defensive utility)"
+        )
+        if analysis["advanced"]["pivot_candidates"]:
+            for entry in analysis["advanced"]["pivot_candidates"][:3]:
+                print(
+                    f"    - {entry['pokemon']}: {entry['style']} pivot ({entry['score']:.2f}) "
+                    f"[{', '.join(entry['reasons'][:3])}]"
+                )
+        low_pressure = analysis["advanced"]["offensive_pressure"]["low_pressure_types"]
+        if low_pressure:
+            print("  Low pressure into types:", ", ".join(low_pressure[:8]))
+        else:
+            print("  Offensive pressure: broad.")
         if analysis['recommendations']:
             print(f"\nRecommendations:")
             for rec in analysis['recommendations']:
@@ -526,7 +951,8 @@ def interactive_random_generator() -> None:
     print(f"RANDOM TEAM GENERATED (fitness={fitness:.4f})")
     print("=" * 80)
     for idx, (_, pokemon) in enumerate(team_df.iterrows(), 1):
-        t2 = f"/{pokemon['type2']}" if pokemon.get("type2") else ""
+        type2 = pokemon.get("type2")
+        t2 = f"/{type2}" if pd.notna(type2) and str(type2).strip() else ""
         archetype = pokemon.get("archetype", "Unknown")
         # Calculate BST from individual stat columns
         stat_cols = ['hp', 'attack', 'defense', 'special-attack', 'special-defense', 'speed']
@@ -629,6 +1055,52 @@ def interactive_team_analyzer() -> None:
     print(f"Role diversity score: {report['roles']['diversity_score']}/100")
 
     print("\n" + "-" * 80)
+    print("TEAM ISSUES (SEVERITY)")
+    print("-" * 80)
+    if report["issues"]:
+        for issue in report["issues"]:
+            print(f"{issue['issue']:28s} severity: {issue['severity']:6s} | {issue['detail']}")
+    else:
+        print("No major issues detected.")
+
+    print("\n" + "-" * 80)
+    print("ADVANCED SNAPSHOT")
+    print("-" * 80)
+    speed_tiers = report["advanced"]["speed_tiers"]
+    print(
+        f"Speed tiers: 120+={speed_tiers['120+']}, "
+        f"100-119={speed_tiers['100-119']}, "
+        f"80-99={speed_tiers['80-99']}, <80={speed_tiers['<80']}"
+    )
+    pivot_summary = report["advanced"]["pivot_summary"]
+    print(
+        f"Pivot candidates: count={pivot_summary['candidate_count']}, "
+        f"top score={pivot_summary['top_score']:.2f}"
+    )
+    print(
+        f"Pivot score threshold: {PIVOT_CANDIDATE_THRESHOLD:.2f} "
+        "(bulk + speed + pressure + defensive utility)"
+    )
+    if report["advanced"]["pivot_candidates"]:
+        for entry in report["advanced"]["pivot_candidates"]:
+            print(
+                f"  {entry['pokemon']:12s} {entry['style']:5s} pivot {entry['score']:.2f} | "
+                + ", ".join(entry["reasons"][:3])
+            )
+    low_pressure = report["advanced"]["offensive_pressure"]["low_pressure_types"]
+    if low_pressure:
+        print("Low offensive pressure into:", ", ".join(low_pressure[:8]))
+    else:
+        print("Offensive pressure coverage is broad.")
+    print("Defensive synergy by Pokemon:")
+    for entry in report["advanced"]["defensive_synergy"]:
+        print(
+            f"  {entry['pokemon']:12s} "
+            f"covered weaknesses {entry['covered_weaknesses']}/{entry['total_weaknesses']} "
+            f"({entry['coverage_ratio'] * 100:.0f}%)"
+        )
+
+    print("\n" + "-" * 80)
     print("RECOMMENDATIONS")
     print("-" * 80)
     for rec in report["recommendations"]:
@@ -656,17 +1128,17 @@ def run_interactive_menu() -> int:
             return 0
         choice = raw_choice.strip()
         if choice == "1":
-            interactive_team_generator()
+            _run_with_error_guard("Team Generator", interactive_team_generator)
             if not _pause_to_menu():
                 print("\nInput interrupted. Exiting.")
                 return 0
         elif choice == "2":
-            interactive_team_analyzer()
+            _run_with_error_guard("Team Analyzer", interactive_team_analyzer)
             if not _pause_to_menu():
                 print("\nInput interrupted. Exiting.")
                 return 0
         elif choice == "3":
-            interactive_random_generator()
+            _run_with_error_guard("Random Team Generator", interactive_random_generator)
             if not _pause_to_menu():
                 print("\nInput interrupted. Exiting.")
                 return 0
@@ -680,7 +1152,7 @@ def run_interactive_menu() -> int:
 def run_cluster(args: argparse.Namespace) -> int:
     _print_header("CLI: CLUSTER WORKFLOW")
 
-    clustering_script = PROJ_ROOT / "src" / "analysis" / "clustering.py"
+    clustering_script = PROJ_ROOT / "legacy" / "src" / "analysis" / "clustering.py"
     deliverables_script = (
         PROJ_ROOT
         / "reports"

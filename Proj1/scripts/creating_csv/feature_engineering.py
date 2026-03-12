@@ -129,7 +129,7 @@ def calculate_all_features(df: pd.DataFrame) -> pd.DataFrame:
     - 4 core stat features (magnitude + orientation)
     - 18 type defensive features (structure)
     
-    Returns DataFrame with original columns + 22 new engineered features
+    Returns DataFrame with original columns + engineered features
     """
     result = df.copy()
     
@@ -148,6 +148,21 @@ def calculate_all_features(df: pd.DataFrame) -> pd.DataFrame:
     total_offense = result["attack"] + result["special-attack"]
     result["physical_special_bias"] = (result["attack"] - result["special-attack"]) / total_offense
     result["physical_special_bias"] = result["physical_special_bias"].fillna(0)
+
+    # Defensive asymmetry and role-shape features for better tank role separation
+    result["physical_bulk"] = result["hp"] * result["defense"]
+    result["special_bulk"] = result["hp"] * result["special-defense"]
+
+    total_bulk = result["physical_bulk"] + result["special_bulk"]
+    result["bulk_bias"] = (result["special_bulk"] - result["physical_bulk"]) / total_bulk
+    result["bulk_bias"] = result["bulk_bias"].replace([np.inf, -np.inf], 0).fillna(0)
+
+    result["offense_to_bulk_ratio"] = result["offensive_index"] / (result["defensive_index"] + 1e-6)
+    result["speed_to_bulk_ratio"] = result["speed"] / (result["defensive_index"] + 1e-6)
+
+    # Percentile forms reduce sensitivity to absolute stat scale outliers.
+    result["special_bulk_percentile"] = result["special_bulk"].rank(pct=True)
+    result["physical_bulk_percentile"] = result["physical_bulk"].rank(pct=True)
     
     print("  Building type effectiveness chart...")
     type_chart = build_type_effectiveness_chart()
@@ -197,7 +212,7 @@ if __name__ == "__main__":
     
     print(f"Dataset shape: {df_with_features.shape}")
     print(f"Rows: {len(df_with_features)} Pokemon")
-    print(f"Columns: {len(df_with_features.columns)} (includes 22 engineered features)\n")
+    print(f"Columns: {len(df_with_features.columns)} (includes engineered features)\n")
     
     print("Features added:")
     print("  Core Stats (4D):")
@@ -209,6 +224,15 @@ if __name__ == "__main__":
     type_names, _ = build_type_effectiveness_chart()
     for type_name in type_names:
         print(f"    - type_defense_{type_name}")
+
+    print("  Defensive Asymmetry / Role Shape:")
+    print("    - physical_bulk")
+    print("    - special_bulk")
+    print("    - bulk_bias")
+    print("    - offense_to_bulk_ratio")
+    print("    - speed_to_bulk_ratio")
+    print("    - special_bulk_percentile")
+    print("    - physical_bulk_percentile")
     
     print(f"\n💡 Ready for: StandardScaler → PCA → GMM Clustering")
     print(f"💡 To test specific Pokemon, run: python test_pokemon_features.py")

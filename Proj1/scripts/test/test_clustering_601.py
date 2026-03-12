@@ -16,6 +16,27 @@ import joblib
 from pathlib import Path
 
 
+def get_feature_columns(df: pd.DataFrame):
+    """Infer feature columns used by clustering from available engineered features."""
+    role_shape_cols = [
+        'offensive_index',
+        'defensive_index',
+        'speed_percentile',
+        'physical_special_bias',
+        'physical_bulk',
+        'special_bulk',
+        'bulk_bias',
+        'offense_to_bulk_ratio',
+        'speed_to_bulk_ratio',
+        'special_bulk_percentile',
+        'physical_bulk_percentile',
+    ]
+    return [
+        c for c in df.columns
+        if c.startswith('type_defense_') or c in role_shape_cols
+    ]
+
+
 def test_models_load():
     """Test 1: All models load without errors"""
     print("\n[TEST 1] Loading models...")
@@ -44,10 +65,7 @@ def test_feature_pipeline(scaler, pca, gmm):
     data_dir = Path(__file__).parents[2] / "reports" / "clustering_analysis" / "data"
     df = pd.read_csv(data_dir / "pokemon_with_clusters.csv")
     
-    feature_cols = ['offensive_index', 'defensive_index', 'speed_percentile', 'physical_special_bias'] + \
-                   [f'type_defense_{t}' for t in ['normal', 'fire', 'water', 'grass', 'electric', 'ice', 
-                    'fighting', 'poison', 'ground', 'flying', 'psychic', 'bug', 'rock', 'ghost', 
-                    'dragon', 'dark', 'steel', 'fairy']]
+    feature_cols = get_feature_columns(df)
     
     try:
         # Extract and transform
@@ -130,10 +148,7 @@ def test_sample_predictions(scaler, pca, gmm, df):
     """Test 5: Sample predictions for known Pokemon"""
     print("\n[TEST 5] Testing sample predictions...")
     
-    feature_cols = ['offensive_index', 'defensive_index', 'speed_percentile', 'physical_special_bias'] + \
-                   [f'type_defense_{t}' for t in ['normal', 'fire', 'water', 'grass', 'electric', 'ice', 
-                    'fighting', 'poison', 'ground', 'flying', 'psychic', 'bug', 'rock', 'ghost', 
-                    'dragon', 'dark', 'steel', 'fairy']]
+    feature_cols = get_feature_columns(df)
     
     # Test on known competitive Pokemon
     test_pokemon = ['dragapult', 'landorus-therian', 'blissey', 'garchomp', 'iron-valiant']

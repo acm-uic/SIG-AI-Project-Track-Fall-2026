@@ -1,4 +1,4 @@
-"""
+﻿"""
 Clustering Pipeline with A/B Testing: Full Dataset vs. Filtered (No Legendaries)
 
 This pipeline implements the complete clustering workflow with comparative analysis:
@@ -41,7 +41,7 @@ warnings.filterwarnings('ignore')
 
 def load_features():
     """Load engineered features from CSV."""
-    data_folder = pathlib.Path(__file__).resolve().parents[2] / "data"
+    data_folder = pathlib.Path(__file__).resolve().parents[3] / "data"
     features_csv = data_folder / "cluster_data" / "pokemon_archetype_features.csv"
     
     if not features_csv.exists():
@@ -101,7 +101,7 @@ def fit_gmm_models(X_full_pca, X_filtered_pca, k_values=[5, 6, 7, 8, 9, 10, 11, 
         'filtered': {}
     }
     
-    print("\n🤖 Training GMM models...")
+    print("\n≡ƒñû Training GMM models...")
     
     for k in k_values:
         # Full dataset
@@ -110,7 +110,7 @@ def fit_gmm_models(X_full_pca, X_filtered_pca, k_values=[5, 6, 7, 8, 9, 10, 11, 
         labels_full = gmm_full.fit_predict(X_full_pca)
         sil_full = silhouette_score(X_full_pca, labels_full)
         db_full = davies_bouldin_score(X_full_pca, labels_full)
-        print(f"✓ (SIL={sil_full:.3f})")
+        print(f"Γ£ô (SIL={sil_full:.3f})")
         
         results['full'][k] = {
             'model': gmm_full,
@@ -127,7 +127,7 @@ def fit_gmm_models(X_full_pca, X_filtered_pca, k_values=[5, 6, 7, 8, 9, 10, 11, 
         labels_filtered = gmm_filtered.fit_predict(X_filtered_pca)
         sil_filtered = silhouette_score(X_filtered_pca, labels_filtered)
         db_filtered = davies_bouldin_score(X_filtered_pca, labels_filtered)
-        print(f"✓ (SIL={sil_filtered:.3f})")
+        print(f"Γ£ô (SIL={sil_filtered:.3f})")
         
         results['filtered'][k] = {
             'model': gmm_filtered,
@@ -221,13 +221,13 @@ def create_comparison_report(results, X_full_pca, X_filtered_pca, pca, scaler):
     report.append("=" * 80)
     
     if sil_delta > 0.05:
-        recommendation = "✅ USE FULL DATASET (includes legendaries)"
+        recommendation = "Γ£à USE FULL DATASET (includes legendaries)"
         reason = "Legendaries improve clustering quality (silhouette delta > 0.05)"
     elif sil_delta < -0.05:
-        recommendation = "❌ FILTER LEGENDARIES BEFORE CLUSTERING"
+        recommendation = "Γ¥î FILTER LEGENDARIES BEFORE CLUSTERING"
         reason = "Removing legendaries improves clustering quality (silhouette delta < -0.05)"
     else:
-        recommendation = "✅ USE FULL DATASET (essentially equivalent)"
+        recommendation = "Γ£à USE FULL DATASET (essentially equivalent)"
         reason = "Silhouette scores are statistically equivalent; preserving data is preferred"
     
     report.append(f"\n{recommendation}")
@@ -235,7 +235,7 @@ def create_comparison_report(results, X_full_pca, X_filtered_pca, pca, scaler):
     report.append(f"\nSelected Configuration:")
     report.append(f"   Dataset: Full {len(X_full_pca)} Pokemon")
     report.append(f"   k: {best_full_k}")
-    report.append(f"   Expected cluster sizes: {len(X_full_pca) // best_full_k} ± 50 Pokemon per cluster")
+    report.append(f"   Expected cluster sizes: {len(X_full_pca) // best_full_k} ┬▒ 50 Pokemon per cluster")
     
     report.append(f"\nNext Steps:")
     report.append(f"   1. Analyze cluster centroids in PCA space")
@@ -253,29 +253,29 @@ def save_outputs(output_dir, results, scaler, pca, X_full_pca, X_filtered_pca):
     models_dir = output_dir / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
     
-    print("\n💾 Saving outputs...")
+    print("\n≡ƒÆ╛ Saving outputs...")
     
     # Save transformers
     joblib.dump(scaler, models_dir / "scaler.pkl")
     joblib.dump(pca, models_dir / "pca.pkl")
-    print(f"   ✓ models/scaler.pkl, models/pca.pkl")
+    print(f"   Γ£ô models/scaler.pkl, models/pca.pkl")
     
     # Save all GMM models
     for k in results['full'].keys():
         joblib.dump(results['full'][k]['model'], models_dir / f"gmm_full_k{k}.pkl")
         joblib.dump(results['filtered'][k]['model'], models_dir / f"gmm_filtered_k{k}.pkl")
-    print(f"   ✓ models/gmm_full_k*.pkl, models/gmm_filtered_k*.pkl ({len(results['full'])} models each)")
+    print(f"   Γ£ô models/gmm_full_k*.pkl, models/gmm_filtered_k*.pkl ({len(results['full'])} models each)")
     
     # Save cluster labels
     for k in results['full'].keys():
         np.save(models_dir / f"cluster_labels_full_k{k}.npy", results['full'][k]['labels'])
         np.save(models_dir / f"cluster_labels_filtered_k{k}.npy", results['filtered'][k]['labels'])
-    print(f"   ✓ models/cluster_labels_*.npy")
+    print(f"   Γ£ô models/cluster_labels_*.npy")
     
     # Save PCA features
     np.save(models_dir / "features_pca_full.npy", X_full_pca)
     np.save(models_dir / "features_pca_filtered.npy", X_filtered_pca)
-    print(f"   ✓ models/features_pca_*.npy")
+    print(f"   Γ£ô models/features_pca_*.npy")
 
 
 def plot_pca_variance(pca, output_dir):
@@ -299,7 +299,7 @@ def plot_pca_variance(pca, output_dir):
     
     plt.tight_layout()
     plt.savefig(plots_dir / "pca_variance_plot.png", dpi=150, bbox_inches='tight')
-    print(f"   ✓ plots/pca_variance_plot.png")
+    print(f"   Γ£ô plots/pca_variance_plot.png")
     plt.close()
 
 
@@ -337,7 +337,7 @@ def plot_silhouette_comparison(results, output_dir):
     
     plt.tight_layout()
     plt.savefig(plots_dir / "silhouette_comparison.png", dpi=150, bbox_inches='tight')
-    print(f"   ✓ plots/silhouette_comparison.png")
+    print(f"   Γ£ô plots/silhouette_comparison.png")
     plt.close()
 
 
@@ -347,25 +347,25 @@ def main():
     print("=" * 80)
     
     # Load and prepare data
-    print("\n📂 Loading engineered features...")
+    print("\n≡ƒôé Loading engineered features...")
     df, feature_cols = load_features()
     print(f"   Loaded {len(df)} Pokemon with {len(feature_cols)} features")
     
-    print("\n📊 Preparing datasets...")
+    print("\n≡ƒôè Preparing datasets...")
     X_full, X_filtered, df_full, df_filtered = prepare_datasets(df, feature_cols)
     print(f"   Full dataset: {X_full.shape[0]} x {X_full.shape[1]} (23D)")
     print(f"   Filtered dataset: {X_filtered.shape[0]} x {X_filtered.shape[1]} (23D)")
     print(f"   Removed: {X_full.shape[0] - X_filtered.shape[0]} legendaries (BST > 580)")
     
     # Standardize
-    print("\n⚖️  Normalizing features (RobustScaler)...")
+    print("\nΓÜû∩╕Å  Normalizing features (RobustScaler)...")
     X_full_scaled, X_filtered_scaled, scaler = standardize_features(X_full, X_filtered)
-    print(f"   ✓ Both datasets normalized")
+    print(f"   Γ£ô Both datasets normalized")
     
     # PCA
-    print("\n📉 Dimensionality reduction (PCA → 85% variance)...")
+    print("\n≡ƒôë Dimensionality reduction (PCA ΓåÆ 85% variance)...")
     X_full_pca, X_filtered_pca, pca = reduce_dimensionality(X_full_scaled, X_filtered_scaled)
-    print(f"   23D → {X_full_pca.shape[1]}D")
+    print(f"   23D ΓåÆ {X_full_pca.shape[1]}D")
     print(f"   Cumulative variance explained: {np.sum(pca.explained_variance_ratio_):.1%}")
     
     # Train GMM models
@@ -377,11 +377,11 @@ def main():
     print(report)
     
     # Save outputs
-    output_dir = pathlib.Path(__file__).resolve().parents[2] / "reports" / "clustering_analysis"
+    output_dir = pathlib.Path(__file__).resolve().parents[3] / "reports" / "clustering_analysis"
     save_outputs(output_dir, results, scaler, pca, X_full_pca, X_filtered_pca)
     
     # Generate visualizations
-    print("\n📈 Creating visualizations...")
+    print("\n≡ƒôê Creating visualizations...")
     plot_pca_variance(pca, output_dir)
     plot_silhouette_comparison(results, output_dir)
     
@@ -390,16 +390,16 @@ def main():
     report_path.parent.mkdir(parents=True, exist_ok=True)
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write(report)
-    print(f"   ✓ reports/clustering_comparison_report.txt")
+    print(f"   Γ£ô reports/clustering_comparison_report.txt")
     
     # Print relative path from project root
-    proj_root = pathlib.Path(__file__).resolve().parents[2]
+    proj_root = pathlib.Path(__file__).resolve().parents[3]
     try:
         rel_path = output_dir.relative_to(proj_root)
-        print(f"\n✅ Pipeline complete! Outputs saved to: {rel_path}\n")
+        print(f"\nΓ£à Pipeline complete! Outputs saved to: {rel_path}\n")
     except ValueError:
         # Fallback if output_dir is outside project
-        print(f"\n✅ Pipeline complete! Outputs saved to: {output_dir}\n")
+        print(f"\nΓ£à Pipeline complete! Outputs saved to: {output_dir}\n")
 
 
 if __name__ == "__main__":

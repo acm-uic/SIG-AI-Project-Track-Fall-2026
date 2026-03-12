@@ -12,23 +12,34 @@ from pathlib import Path
 
 
 # ============================================================================
-# GROUND TRUTH ANNOTATIONS (30 Pokémon) - Expanded Coverage
+# GROUND TRUTH ANNOTATIONS (70+ Pokemon) - Broader Coverage
 # ============================================================================
 
 GROUND_TRUTH = {
-    # Sweepers / Attackers (10)
+    # Sweepers / Attackers
     "alakazam": "Sweeper",
     "dragapult": "Sweeper",
     "cloyster": "Sweeper",
     "volcarona": "Sweeper",
     "gyarados": "Sweeper",
     "weavile": "Sweeper",
-    "garchomp": "Mixed",
     "gengar": "Sweeper",
-    "salamence": "Mixed",
-    "dragonite": "Mixed",
-    
-    # Defensive Walls (7)
+    "infernape": "Sweeper",
+    "lucario": "Sweeper",
+    "excadrill": "Sweeper",
+    "aegislash": "Sweeper",
+    "thundurus": "Sweeper",
+    "aerodactyl": "Sweeper",
+    "jolteon": "Sweeper",
+    "manectric": "Sweeper",
+    "starmie": "Sweeper",
+    "hydreigon": "Sweeper",
+    "chandelure": "Sweeper",
+    "sceptile": "Sweeper",
+    "charizard": "Sweeper",
+    "haxorus": "Sweeper",
+
+    # Defensive Walls
     "blissey": "Wall",
     "toxapex": "Wall",
     "skarmory": "Wall",
@@ -36,35 +47,58 @@ GROUND_TRUTH = {
     "hippowdon": "Wall",
     "umbreon": "Wall",
     "cresselia": "Wall",
-    
-    # Pivots / Utility (6)
+    "chansey": "Wall",
+    "slowbro": "Wall",
+    "snorlax": "Wall",
+    "milotic": "Wall",
+    "vaporeon": "Wall",
+    "suicune": "Wall",
+    "mamoswine": "Wall",
+    "gastrodon": "Wall",
+    "quagsire": "Wall",
+    "swampert": "Wall",
+    "dusknoir": "Wall",
+    "registeel": "Wall",
+
+    # Pivots / Utility
     "corviknight": "Pivot",
     "rotom": "Pivot",
-    "landorus-therian": "Pivot",
+    "landorus": "Pivot",
     "heatran": "Pivot",
     "togekiss": "Pivot",
     "mandibuzz": "Pivot",
-    
-    # Mixed / Balanced (4)
+    "scizor": "Pivot",
+    "gliscor": "Pivot",
+    "magnezone": "Pivot",
+    "empoleon": "Pivot",
+    "zapdos": "Pivot",
+    "raikou": "Pivot",
+    "rotom-wash": "Pivot",
+
+    # Mixed / Balanced
     "greninja": "Mixed",
     "iron-valiant": "Mixed",
     "urshifu-single-strike": "Mixed",
-    "tapu-smeargle": "Mixed",
-    
-    # Tanks / Defensive (3)
-    "defense-forme": "Wall",  # Deoxys-Defense
+    "garchomp": "Mixed",
+    "salamence": "Mixed",
+    "dragonite": "Mixed",
     "metagross": "Mixed",
-    "zapdos": "Mixed",
-}
-
-# Map our 6 archetypes to ground truth roles (simple heuristic)
-ARCHETYPE_TO_ROLE = {
-    "Speed Sweeper": "Sweeper",
-    "Fast Attacker": "Sweeper",
-    "Physical Attacker": "Sweeper",
-    "Defensive Tank": "Wall",
-    "Balanced All-Rounder": "Mixed",
-    "Generalist": "Mixed",
+    "defense-forme": "Wall",  # Deoxys-Defense
+    "tyranitar": "Mixed",
+    "latios": "Mixed",
+    "latias": "Mixed",
+    "mew": "Mixed",
+    "celebi": "Mixed",
+    "jirachi": "Mixed",
+    "victini": "Mixed",
+    "arcanine": "Mixed",
+    "scrafty": "Mixed",
+    "aggron": "Mixed",
+    "lapras": "Mixed",
+    "kingdra": "Mixed",
+    "abomasnow": "Mixed",
+    "gallade": "Mixed",
+    "machamp": "Mixed",
 }
 
 # Enhanced role mapping using archetype + engineered features
@@ -85,11 +119,6 @@ def predict_role_enhanced(row):
         "Generalist": "Mixed",
     }
     return mapping.get(archetype, "Mixed")
-
-
-def predict_role(archetype_name):
-    """Map archetype to predicted competitive role."""
-    return ARCHETYPE_TO_ROLE.get(archetype_name, "Mixed")
 
 
 def main():

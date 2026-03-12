@@ -1,4 +1,4 @@
-
+﻿
 class BaseModel:
     """
     This is a parent class for different ML models. 

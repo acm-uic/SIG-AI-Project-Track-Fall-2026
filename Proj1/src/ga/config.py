@@ -34,7 +34,12 @@ def get_base_config():
             
             # BST cap (competitive tier constraint)
             "bst_cap": 3300,               # Total team BST limit (~550 avg = OU tier)
-            "bst_penalty_weight": 2.0      # Penalty scaling: -(excess/100) * weight
+            "bst_penalty_weight": 2.0,     # Penalty scaling: -(excess/100) * weight
+
+            # Optional CLI-side pivot pressure bonus
+            "pivot_weight": 0.0,
+            "target_pivot_count": 0,
+            "pivot_threshold": 0.62,
         },
         "initialization": {
             "method": "uniform"  # uniform | inverse | sqrt_weighted

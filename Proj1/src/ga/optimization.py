@@ -22,7 +22,7 @@ from collections import Counter
 import warnings
 warnings.filterwarnings('ignore')
 
-from .fitness import evaluate_fitness, compute_archetype_entropy
+from .fitness import TYPE_NAMES, evaluate_fitness, compute_archetype_entropy, get_type_effectiveness
 
 
 class PokemonGA:
@@ -392,9 +392,17 @@ class PokemonGA:
             candidates = self.pokemon_df[~self.pokemon_df['name'].isin(current_names)]
             new_pokemon = candidates.sample(n=1, random_state=self.rng.integers(0, 1000000)).iloc[0]
         
-        # Replace
-        team_mutated = team.copy()
-        team_mutated.iloc[mut_idx] = new_pokemon
+        # Replace row using column-aligned reconstruction.
+        # pandas row assignment with iloc can raise LossySetitemError on mixed dtypes.
+        team_mutated = team.copy().reset_index(drop=True)
+        replacement = {
+            col: new_pokemon[col] if col in new_pokemon.index else team_mutated.at[mut_idx, col]
+            for col in team_mutated.columns
+        }
+
+        records = team_mutated.to_dict('records')
+        records[mut_idx] = replacement
+        team_mutated = pd.DataFrame(records, columns=team_mutated.columns)
         
         return self._enforce_locked_pokemon(team_mutated.reset_index(drop=True))
     
@@ -668,6 +676,108 @@ def load_pokemon_data() -> pd.DataFrame:
     
     df = pd.read_csv(data_path)
     print(f"[DATA] Loaded {len(df)} Pokemon from: {data_path.name}")
+
+    type_defense_cols = [col for col in df.columns if col.startswith('type_defense_')]
+    if type_defense_cols:
+        defensive_rank = pd.to_numeric(df['defensive_index'], errors='coerce').fillna(0.0).rank(pct=True)
+        offensive_index = pd.to_numeric(df['offensive_index'], errors='coerce').fillna(0.0)
+        speed = pd.to_numeric(df['speed'], errors='coerce').fillna(0.0)
+        physical_special_bias = pd.to_numeric(df.get('physical_special_bias', 0.0), errors='coerce').fillna(0.0)
+
+        resist_count = []
+        immune_count = []
+        weakness_count = []
+        for _, row in df.iterrows():
+            defending_types = [row['type1']]
+            if pd.notna(row.get('type2')) and row.get('type2'):
+                defending_types.append(row['type2'])
+
+            resist = 0
+            immune = 0
+            weak = 0
+            for attacking_type in TYPE_NAMES:
+                effectiveness = get_type_effectiveness(attacking_type, defending_types)
+                if effectiveness == 0.0:
+                    immune += 1
+                elif effectiveness <= 0.5:
+                    resist += 1
+                elif effectiveness > 1.0:
+                    weak += 1
+            resist_count.append(resist)
+            immune_count.append(immune)
+            weakness_count.append(weak)
+
+        resist_count = pd.Series(resist_count, index=df.index, dtype=float)
+        immune_count = pd.Series(immune_count, index=df.index, dtype=float)
+        weakness_count = pd.Series(weakness_count, index=df.index, dtype=float)
+
+        offense_score = (1.0 - ((offensive_index - 175.0).abs() / 95.0)).clip(lower=0.0, upper=1.0)
+        fast_speed_score = (1.0 - ((speed - 100.0).abs() / 55.0)).clip(lower=0.0, upper=1.0)
+        slow_speed_score = (1.0 - ((speed - 60.0).abs() / 40.0)).clip(lower=0.0, upper=1.0)
+        slow_speed_score = slow_speed_score * (0.55 + 0.45 * defensive_rank)
+        speed_score = np.maximum(fast_speed_score, slow_speed_score)
+
+        type_utility_score = (
+            (resist_count + (1.75 * immune_count) - (1.10 * weakness_count) + 1.0) / 10.0
+        ).clip(lower=0.0, upper=1.0)
+
+        if 'offense_to_bulk_ratio' in df.columns:
+            offense_to_bulk = pd.to_numeric(df['offense_to_bulk_ratio'], errors='coerce').fillna(0.0)
+            profile_score = (1.0 - ((offense_to_bulk - 0.85).abs() / 0.85)).clip(lower=0.0, upper=1.0)
+        else:
+            profile_score = (1.0 - (physical_special_bias.abs() * 0.6)).clip(lower=0.0, upper=1.0)
+
+        fast_pivot_bonus = (
+            (speed >= 88)
+            & (speed <= 120)
+            & (defensive_rank >= 0.45)
+            & (offense_score >= 0.30)
+        ).astype(float) * 0.10
+        slow_pivot_bonus = (
+            (speed <= 80)
+            & (defensive_rank >= 0.70)
+            & (offense_score >= 0.20)
+        ).astype(float) * 0.12
+
+        ability_bonus = pd.Series(0.0, index=df.index)
+        abilities_path = proj_root / 'data' / 'pokemon_abilities.csv'
+        if abilities_path.exists():
+            abilities_df = pd.read_csv(abilities_path)
+            ability_name_col = 'name' if 'name' in abilities_df.columns else None
+            ability_cols = [col for col in abilities_df.columns if 'ability' in col.lower()]
+            if ability_name_col and ability_cols:
+                merged = df[['name']].merge(
+                    abilities_df[[ability_name_col] + ability_cols],
+                    left_on='name',
+                    right_on=ability_name_col,
+                    how='left',
+                )
+                ability_text = merged[ability_cols].fillna('').astype(str).agg(' '.join, axis=1).str.lower()
+                ability_bonus += ability_text.str.contains('regenerator', regex=False).astype(float) * 0.15
+                ability_bonus += ability_text.str.contains('intimidate', regex=False).astype(float) * 0.12
+                ability_bonus += ability_text.str.contains('natural cure', regex=False).astype(float) * 0.08
+                ability_bonus += ability_text.str.contains('magic guard', regex=False).astype(float) * 0.06
+                ability_bonus = ability_bonus.clip(upper=0.18)
+
+        pivot_score = (
+            0.32 * defensive_rank +
+            0.18 * speed_score +
+            0.10 * offense_score +
+            0.25 * type_utility_score +
+            0.15 * profile_score +
+            fast_pivot_bonus +
+            slow_pivot_bonus +
+            ability_bonus
+        ).clip(lower=0.0, upper=1.0)
+
+        df['pivot_bulk_score'] = defensive_rank
+        df['pivot_speed_score'] = speed_score
+        df['pivot_offense_score'] = offense_score
+        df['pivot_type_utility_score'] = type_utility_score
+        df['pivot_profile_score'] = profile_score
+        df['pivot_ability_bonus'] = ability_bonus
+        df['pivot_score'] = pivot_score
+        df['pivot_style_hint'] = np.where(fast_speed_score >= slow_speed_score, 'fast', 'slow')
     
     # Verify required columns
     required_cols = ['name', 'archetype', 'cluster', 'offensive_index', 'defensive_index']
