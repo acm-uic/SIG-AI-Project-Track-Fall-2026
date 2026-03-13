@@ -27,8 +27,8 @@ GROUND_TRUTH = {
     "infernape": "Sweeper",
     "lucario": "Sweeper",
     "excadrill": "Sweeper",
-    "aegislash": "Sweeper",
-    "thundurus": "Sweeper",
+    "aegislash-shield": "Sweeper",
+    "thundurus-incarnate": "Sweeper",
     "aerodactyl": "Sweeper",
     "jolteon": "Sweeper",
     "manectric": "Sweeper",
@@ -47,7 +47,6 @@ GROUND_TRUTH = {
     "hippowdon": "Wall",
     "umbreon": "Wall",
     "cresselia": "Wall",
-    "chansey": "Wall",
     "slowbro": "Wall",
     "snorlax": "Wall",
     "milotic": "Wall",
@@ -62,8 +61,8 @@ GROUND_TRUTH = {
 
     # Pivots / Utility
     "corviknight": "Pivot",
-    "rotom": "Pivot",
-    "landorus": "Pivot",
+    "rotom-wash": "Pivot",
+    "landorus-incarnate": "Pivot",
     "heatran": "Pivot",
     "togekiss": "Pivot",
     "mandibuzz": "Pivot",
@@ -83,7 +82,7 @@ GROUND_TRUTH = {
     "salamence": "Mixed",
     "dragonite": "Mixed",
     "metagross": "Mixed",
-    "defense-forme": "Wall",  # Deoxys-Defense
+    "deoxys-defense": "Wall",
     "tyranitar": "Mixed",
     "latios": "Mixed",
     "latias": "Mixed",
@@ -99,6 +98,14 @@ GROUND_TRUTH = {
     "abomasnow": "Mixed",
     "gallade": "Mixed",
     "machamp": "Mixed",
+}
+
+NAME_ALIASES = {
+    "aegislash": "aegislash-shield",
+    "thundurus": "thundurus-incarnate",
+    "landorus": "landorus-incarnate",
+    "defense-forme": "deoxys-defense",
+    "rotom": "rotom-wash",
 }
 
 # Enhanced role mapping using archetype + engineered features
@@ -183,8 +190,9 @@ def main():
     found_count = 0
     
     for poke_name in test_pokemon:
+        lookup_name = NAME_ALIASES.get(poke_name.lower(), poke_name.lower())
         # Find in dataset (case-insensitive)
-        poke_row = pokemon_df[pokemon_df['name'].str.lower() == poke_name.lower()]
+        poke_row = pokemon_df[pokemon_df['name'].str.lower() == lookup_name]
         
         if len(poke_row) == 0:
             print(f"{poke_name:<20} {'(NOT FOUND)':>12}")

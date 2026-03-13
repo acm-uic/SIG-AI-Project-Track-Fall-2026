@@ -14,14 +14,81 @@ Total: 23D engineered feature space ready for StandardScaler → PCA → Cluster
 """
 
 import pathlib
+import json
 import pandas as pd
 import numpy as np
 
 
-data_folder = pathlib.Path(__file__).resolve().parents[2] / "data"
+data_folder = pathlib.Path(__file__).resolve().parents[3] / "data"
 pokemon_stats_folder = data_folder / "test"
 pokemon_stats_csv = pokemon_stats_folder / "fully_evolved_pokemon_stats.csv"
+all_pokemon_stats_csv = pokemon_stats_folder / "all_pokemon_stats.csv"
+selected_forms_json = pathlib.Path(__file__).resolve().parent / "missing_pokemon_selected_forms.json"
 cluster_data_folder = data_folder / "cluster_data"
+
+EXCLUDED_FORM_SUBSTRINGS = ["-mega", "-gmax"]
+EXCLUDED_FORM_PREFIXES = ["minior-"]
+EXCLUDED_FORM_EXACT = {"dudunsparce-three-segment"}
+
+
+def _is_excluded_form(name: str) -> bool:
+    n = str(name).strip().lower()
+    if not n:
+        return False
+    if n in EXCLUDED_FORM_EXACT:
+        return True
+    if any(n.startswith(prefix) for prefix in EXCLUDED_FORM_PREFIXES):
+        return True
+    if any(token in n for token in EXCLUDED_FORM_SUBSTRINGS):
+        return True
+    return False
+
+
+def load_training_stats() -> pd.DataFrame:
+    """Load fully-evolved stats and append form variants from all_pokemon_stats."""
+    base_df = pd.read_csv(pokemon_stats_csv)
+
+    if not all_pokemon_stats_csv.exists():
+        return base_df
+
+    all_df = pd.read_csv(all_pokemon_stats_csv)
+
+    base_names = set(base_df["name"].astype(str).str.lower())
+    all_names = all_df["name"].astype(str).str.lower()
+
+    # Include form rows where the base species is already in fully evolved set.
+    form_rows = all_df[
+        all_names.str.contains("-", regex=False)
+        & all_names.apply(lambda n: n.split("-", 1)[0] in base_names)
+    ].copy()
+
+    # Also include any explicit selected forms file if present.
+    if selected_forms_json.exists():
+        selected_data = json.loads(selected_forms_json.read_text(encoding="utf-8"))
+        selected_forms = sorted(
+            {
+                str(form).strip().lower()
+                for entry in selected_data
+                for form in entry.get("selected_forms", [])
+                if isinstance(form, str) and form.strip()
+            }
+        )
+        if selected_forms:
+            explicit_rows = all_df[all_names.isin(selected_forms)].copy()
+            form_rows = pd.concat([form_rows, explicit_rows], ignore_index=True)
+            missing_forms = sorted(set(selected_forms) - set(explicit_rows["name"].astype(str).str.lower().tolist()))
+            if missing_forms:
+                print(f"  Warning: {len(missing_forms)} selected forms not found in all_pokemon_stats.csv")
+
+    # Remove forms we do not want in clustering training.
+    form_rows = form_rows[~form_rows["name"].astype(str).apply(_is_excluded_form)].copy()
+
+    combined_df = pd.concat([base_df, form_rows], ignore_index=True)
+    combined_df = combined_df.drop_duplicates(subset=["name"], keep="last").reset_index(drop=True)
+
+    print(f"  Included form variants: {len(form_rows)}")
+    print(f"  Training rows after merge: {len(combined_df)}")
+    return combined_df
 
 
 def build_type_effectiveness_chart():
@@ -188,10 +255,9 @@ if __name__ == "__main__":
     # Create output folder if it doesn't exist
     cluster_data_folder.mkdir(parents=True, exist_ok=True)
     
-    # Load the full dataset
+    # Load and augment training dataset
     print("Loading Pokemon data...")
-    df = pd.read_csv(pokemon_stats_csv)
-    print(f"  Loaded {len(df)} fully evolved Pokemon")
+    df = load_training_stats()
     
     # Calculate features for all Pokemon
     print("\nCalculating engineered features...")
@@ -203,7 +269,7 @@ if __name__ == "__main__":
     
     print(f"\n✅ Feature engineering complete!")
     # Print relative path from project root
-    proj_root = pathlib.Path(__file__).resolve().parents[2]
+    proj_root = pathlib.Path(__file__).resolve().parents[3]
     try:
         rel_path = output_path.relative_to(proj_root)
         print(f"💾 Saved to: {rel_path}\n")

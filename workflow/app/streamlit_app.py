@@ -34,6 +34,7 @@ from legacy.scripts.cli import analyze_team_by_names
 st.set_page_config(page_title="Pokemon Team Optimizer", layout="wide")
 
 PIVOT_CANDIDATE_THRESHOLD = 0.62
+ABILITY_DATA_PATH = PROJECT_ROOT / "data" / "pokemon_abilities.csv"
 
 
 def _inject_theme() -> None:
@@ -477,12 +478,214 @@ def _resolve_team_from_manual_input(input_names: list[str], data_df: pd.DataFram
     return resolved
 
 
+def _normalize_name(name: str) -> str:
+    return str(name).strip().lower()
+
+
+def _get_stat_columns(df: pd.DataFrame) -> dict[str, str]:
+    return {
+        "hp": "hp",
+        "attack": "attack",
+        "defense": "defense",
+        "sp_attack": "sp_attack" if "sp_attack" in df.columns else "special-attack",
+        "sp_defense": "sp_defense" if "sp_defense" in df.columns else "special-defense",
+        "speed": "speed",
+    }
+
+
+def _load_ability_lookup() -> dict[str, list[str]]:
+    if not ABILITY_DATA_PATH.exists():
+        return {}
+    try:
+        ability_df = pd.read_csv(ABILITY_DATA_PATH)
+    except Exception:  # noqa: BLE001
+        return {}
+
+    if "name" not in ability_df.columns:
+        return {}
+
+    ability_cols = [col for col in ability_df.columns if "ability" in col.lower()]
+    lookup: dict[str, list[str]] = {}
+    for _, row in ability_df.iterrows():
+        key = _normalize_name(row.get("name", ""))
+        if not key:
+            continue
+        values: list[str] = []
+        for col in ability_cols:
+            raw = str(row.get(col, "")).strip()
+            if not raw or raw.lower() == "nan":
+                continue
+            clean = raw.lower().replace("-", " ")
+            if clean not in values:
+                values.append(clean)
+        lookup[key] = values
+    return lookup
+
+
+def _estimate_ability_bonus_from_names(abilities: list[str] | None) -> float:
+    if not abilities:
+        return 0.0
+    ability_text = " ".join(abilities).lower()
+    bonus = 0.0
+    if "regenerator" in ability_text:
+        bonus += 0.15
+    if "intimidate" in ability_text:
+        bonus += 0.12
+    if "poison heal" in ability_text:
+        bonus += 0.10
+    if "natural cure" in ability_text:
+        bonus += 0.08
+    if "storm drain" in ability_text:
+        bonus += 0.05
+    if "water absorb" in ability_text:
+        bonus += 0.04
+    if "volt absorb" in ability_text:
+        bonus += 0.04
+    if "sap sipper" in ability_text:
+        bonus += 0.04
+    if "flash fire" in ability_text:
+        bonus += 0.04
+    if "levitate" in ability_text:
+        bonus += 0.05
+    if "magic guard" in ability_text:
+        bonus += 0.05
+    return min(0.18, bonus)
+
+
 def _guide_section(title: str, text: str) -> None:
     st.markdown(
         f"<div style='color: var(--ink);'><strong>{title}</strong><br>{text}</div>",
         unsafe_allow_html=True,
     )
     st.markdown("<div style='height: 0.6rem;'></div>", unsafe_allow_html=True)
+
+
+def _render_pokemon_info_mode(data_df: pd.DataFrame) -> None:
+    st.markdown("### Pokemon Info")
+    st.caption("Inspect one Pokemon's typing, base stats, archetype, and pivot profile.")
+    with st.expander("Quick Guide", expanded=False):
+        _guide_section(
+            "Pokemon Selector",
+            "Pick a Pokemon by name to view its profile. This is useful for checking whether a single Pokemon is bulky, fast, or pivot-friendly.",
+        )
+        _guide_section(
+            "Pivot Profile",
+            "Pivot score combines bulk, speed, offensive pressure, defensive utility, and ability bonuses. Scores at or above the threshold are pivot candidates.",
+        )
+
+    names = sorted(data_df["name"].astype(str).tolist())
+    selected_name = st.selectbox(
+        "Select Pokemon",
+        options=names,
+        index=0,
+        help="Choose one Pokemon to inspect detailed profile information.",
+    )
+
+    if not selected_name:
+        return
+
+    row = data_df[data_df["name"] == selected_name].iloc[0]
+    stat_cols = _get_stat_columns(data_df)
+    ability_lookup = _load_ability_lookup()
+    selected_key = _normalize_name(selected_name)
+    base_key = selected_key.split("-", 1)[0]
+    abilities = ability_lookup.get(selected_key) or ability_lookup.get(base_key) or []
+
+    hp = int(row.get(stat_cols["hp"], 0) or 0)
+    attack = int(row.get(stat_cols["attack"], 0) or 0)
+    defense = int(row.get(stat_cols["defense"], 0) or 0)
+    sp_attack = int(row.get(stat_cols["sp_attack"], 0) or 0)
+    sp_defense = int(row.get(stat_cols["sp_defense"], 0) or 0)
+    speed = int(row.get(stat_cols["speed"], 0) or 0)
+    bst = hp + attack + defense + sp_attack + sp_defense + speed
+
+    type2_val = row.get("type2")
+    type_label = row.get("type1", "Unknown")
+    if pd.notna(type2_val) and str(type2_val).strip():
+        type_label = f"{type_label}/{type2_val}"
+
+    left, right = st.columns([1, 1])
+    with left:
+        st.markdown("#### Profile")
+        st.write(f"**Name:** {selected_name}")
+        st.write(f"**Type:** {type_label}")
+        st.write(f"**Archetype:** {row.get('archetype', 'Unknown')}")
+        st.write(f"**Cluster:** {row.get('cluster', 'N/A')}")
+        st.write(f"**Abilities:** {', '.join(abilities) if abilities else 'Unavailable'}")
+
+    with right:
+        st.markdown("#### Base Stats")
+        stats_df = pd.DataFrame(
+            [
+                {"Stat": "HP", "Value": hp},
+                {"Stat": "Attack", "Value": attack},
+                {"Stat": "Defense", "Value": defense},
+                {"Stat": "Sp. Attack", "Value": sp_attack},
+                {"Stat": "Sp. Defense", "Value": sp_defense},
+                {"Stat": "Speed", "Value": speed},
+                {"Stat": "BST", "Value": bst},
+            ]
+        )
+        st.dataframe(stats_df, use_container_width=True, hide_index=True)
+
+    st.markdown("#### Pivot Profile")
+    pivot_score = float(pd.to_numeric(pd.Series([row.get("pivot_score", 0.0)]), errors="coerce").fillna(0.0).iloc[0])
+    pivot_candidate = "Yes" if pivot_score >= PIVOT_CANDIDATE_THRESHOLD else "No"
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Pivot Score", f"{pivot_score:.2f}")
+    c2.metric("Pivot Candidate", pivot_candidate)
+    c3.metric("Style", str(row.get("pivot_style_hint", "hybrid")).title())
+
+    pivot_details_df = pd.DataFrame(
+        [
+            {"Component": "Bulk", "Value": float(row.get("pivot_bulk_score", 0.0))},
+            {"Component": "Speed", "Value": float(row.get("pivot_speed_score", 0.0))},
+            {"Component": "Offense", "Value": float(row.get("pivot_offense_score", 0.0))},
+            {"Component": "Type Utility", "Value": float(row.get("pivot_type_utility_score", 0.0))},
+            {"Component": "Profile", "Value": float(row.get("pivot_profile_score", 0.0))},
+            {"Component": "Ability Bonus (Dataset)", "Value": float(row.get("pivot_ability_bonus", 0.0))},
+            {"Component": "Ability Bonus (Estimated)", "Value": _estimate_ability_bonus_from_names(abilities)},
+        ]
+    )
+    st.dataframe(pivot_details_df, use_container_width=True, hide_index=True)
+
+    profile_payload = {
+        "name": selected_name,
+        "type": type_label,
+        "archetype": row.get("archetype", "Unknown"),
+        "cluster": row.get("cluster", "N/A"),
+        "abilities": abilities,
+        "stats": {
+            "hp": hp,
+            "attack": attack,
+            "defense": defense,
+            "special_attack": sp_attack,
+            "special_defense": sp_defense,
+            "speed": speed,
+            "bst": bst,
+        },
+        "pivot": {
+            "threshold": PIVOT_CANDIDATE_THRESHOLD,
+            "candidate": pivot_candidate.lower() == "yes",
+            "score": pivot_score,
+            "style_hint": row.get("pivot_style_hint", "hybrid"),
+            "bulk_score": float(row.get("pivot_bulk_score", 0.0)),
+            "speed_score": float(row.get("pivot_speed_score", 0.0)),
+            "offense_score": float(row.get("pivot_offense_score", 0.0)),
+            "type_utility_score": float(row.get("pivot_type_utility_score", 0.0)),
+            "profile_score": float(row.get("pivot_profile_score", 0.0)),
+            "ability_bonus_dataset": float(row.get("pivot_ability_bonus", 0.0)),
+            "ability_bonus_estimated": _estimate_ability_bonus_from_names(abilities),
+        },
+    }
+    st.download_button(
+        label="Download Pokemon Profile (JSON)",
+        data=json.dumps(profile_payload, indent=2, default=str).encode("utf-8"),
+        file_name=f"pokemon_profile_{selected_name}.json",
+        mime="application/json",
+        use_container_width=True,
+        key=f"dl_pokemon_profile_{selected_name}",
+    )
 
 
 def _render_team_analyzer_mode(data_df: pd.DataFrame) -> None:
@@ -792,9 +995,9 @@ def main() -> None:
         st.header("Mode")
         mode = st.radio(
             "Select",
-            options=["Team Generator", "Team Analyzer", "Random Team"],
+            options=["Team Generator", "Team Analyzer", "Random Team", "Pokemon Info"],
             index=0,
-            help="Choose what you want to do: build a team, analyze a team, or explore random lineups.",
+            help="Choose what you want to do: build a team, analyze a team, explore random lineups, or inspect one Pokemon.",
         )
         st.markdown("---")
         st.caption("If something goes wrong, a Download Error Log button will appear.")
@@ -803,6 +1006,8 @@ def main() -> None:
         _render_team_generator_mode(data_df)
     elif mode == "Team Analyzer":
         _render_team_analyzer_mode(data_df)
+    elif mode == "Pokemon Info":
+        _render_pokemon_info_mode(data_df)
     else:
         _render_random_team_mode(data_df)
 

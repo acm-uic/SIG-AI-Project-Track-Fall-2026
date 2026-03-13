@@ -32,6 +32,7 @@ from src.ga.optimization import load_pokemon_data
 from src.ga.fitness import TYPE_NAMES, get_type_effectiveness
 
 PIVOT_CANDIDATE_THRESHOLD = 0.62
+ABILITY_DATA_PATH = PROJ_ROOT / "data" / "pokemon_abilities.csv"
 
 
 def _print_header(title: str) -> None:
@@ -459,6 +460,73 @@ def _build_pivot_reasons(row: pd.Series) -> List[str]:
     if float(row.get("pivot_ability_bonus", 0.0)) > 0:
         reasons.append("pivot-friendly ability")
     return reasons or ["balanced stat profile"]
+
+
+def _load_ability_lookup() -> Dict[str, List[str]]:
+    """Load local ability dataset for CLI Pokemon profile display."""
+    if not ABILITY_DATA_PATH.exists():
+        return {}
+
+    try:
+        df = pd.read_csv(ABILITY_DATA_PATH)
+    except Exception:
+        return {}
+
+    if "name" not in df.columns:
+        return {}
+
+    ability_cols = [col for col in df.columns if "ability" in col.lower()]
+    lookup: Dict[str, List[str]] = {}
+
+    for _, row in df.iterrows():
+        key = _normalize_name(str(row.get("name", "")))
+        if not key:
+            continue
+
+        abilities: List[str] = []
+        for col in ability_cols:
+            raw = str(row.get(col, "")).strip()
+            if not raw or raw.lower() == "nan":
+                continue
+            name = raw.lower().replace("-", " ")
+            if name not in abilities:
+                abilities.append(name)
+
+        lookup[key] = abilities
+
+    return lookup
+
+
+def _estimate_ability_bonus_from_names(abilities: List[str] | None) -> float:
+    """Mirror GA ability-bonus weights for profile explainability."""
+    if not abilities:
+        return 0.0
+
+    ability_text = " ".join(abilities).lower()
+    bonus = 0.0
+    if "regenerator" in ability_text:
+        bonus += 0.15
+    if "intimidate" in ability_text:
+        bonus += 0.12
+    if "poison heal" in ability_text:
+        bonus += 0.10
+    if "natural cure" in ability_text:
+        bonus += 0.08
+    if "storm drain" in ability_text:
+        bonus += 0.05
+    if "water absorb" in ability_text:
+        bonus += 0.04
+    if "volt absorb" in ability_text:
+        bonus += 0.04
+    if "sap sipper" in ability_text:
+        bonus += 0.04
+    if "flash fire" in ability_text:
+        bonus += 0.04
+    if "levitate" in ability_text:
+        bonus += 0.05
+    if "magic guard" in ability_text:
+        bonus += 0.05
+    return min(0.18, bonus)
 
 
 def _collect_pivot_candidates(team_df: pd.DataFrame, threshold: float = PIVOT_CANDIDATE_THRESHOLD) -> List[Dict[str, object]]:
@@ -1109,6 +1177,93 @@ def interactive_team_analyzer() -> None:
     print(f"\nOverall team score: {report['overall_score']}/100")
 
 
+def interactive_pokemon_info() -> None:
+    _print_header("MENU 4: POKEMON INFO")
+    print("View typing, stats, archetype, and pivot profile for one Pokemon.")
+
+    pokemon_df = load_pokemon_data()
+    stat_cols = _get_stat_columns(pokemon_df)
+    ability_lookup = _load_ability_lookup()
+
+    while True:
+        raw_input = _safe_input("Enter Pokemon name (or press Enter to return): ")
+        if raw_input is None:
+            print("Input interrupted. Returning to menu.")
+            return
+
+        raw = raw_input.strip()
+        if not raw:
+            return
+
+        resolved = _resolve_pokemon_name(raw, pokemon_df)
+        if not resolved:
+            print("Pokemon not found. Try exact name or a distinctive partial name.")
+            continue
+
+        row = pokemon_df[pokemon_df["name"] == resolved].iloc[0]
+
+        type2_val = row.get("type2")
+        type_suffix = f"/{type2_val}" if pd.notna(type2_val) and str(type2_val).strip() else ""
+
+        hp = int(row.get(stat_cols["hp"], 0))
+        attack = int(row.get(stat_cols["attack"], 0))
+        defense = int(row.get(stat_cols["defense"], 0))
+        sp_attack = int(row.get(stat_cols["sp_attack"], 0))
+        sp_defense = int(row.get(stat_cols["sp_defense"], 0))
+        speed = int(row.get(stat_cols["speed"], 0))
+        bst = hp + attack + defense + sp_attack + sp_defense + speed
+
+        archetype = str(row.get("archetype", "Unknown"))
+        cluster = row.get("cluster", "N/A")
+        role_hint = _assign_role(row, stat_cols)
+
+        pivot_score = float(pd.to_numeric(pd.Series([row.get("pivot_score", 0.0)]), errors="coerce").fillna(0.0).iloc[0])
+        pivot_style = str(row.get("pivot_style_hint", "hybrid"))
+        pivot_ability_bonus = float(row.get("pivot_ability_bonus", 0.0))
+
+        abilities = ability_lookup.get(_normalize_name(resolved))
+        ability_source = "local dataset"
+        ability_bonus_estimate = _estimate_ability_bonus_from_names(abilities)
+
+        print("\n" + "-" * 80)
+        print(f"POKEMON PROFILE: {resolved}")
+        print("-" * 80)
+        print(f"Typing: {row.get('type1', 'Unknown')}{type_suffix}")
+        print(f"Archetype: {archetype}")
+        print(f"Cluster: {cluster}")
+        print(f"Role hint: {role_hint}")
+        print(
+            "Stats: "
+            f"HP={hp}, Atk={attack}, Def={defense}, SpA={sp_attack}, SpD={sp_defense}, Spe={speed}, BST={bst}"
+        )
+        if abilities:
+            print(f"Abilities ({ability_source}):", ", ".join(abilities))
+        else:
+            print(
+                "Abilities: unavailable "
+                f"(expected at {ABILITY_DATA_PATH.relative_to(PROJ_ROOT)})"
+            )
+
+        if "pivot_score" in pokemon_df.columns:
+            candidate_text = "yes" if pivot_score >= PIVOT_CANDIDATE_THRESHOLD else "no"
+            print("\nPivot Profile:")
+            print(f"  Pivot score: {pivot_score:.2f} (candidate: {candidate_text})")
+            print(f"  Style hint: {pivot_style}")
+            print(f"  Bulk score: {float(row.get('pivot_bulk_score', 0.0)):.2f}")
+            print(f"  Speed score: {float(row.get('pivot_speed_score', 0.0)):.2f}")
+            print(f"  Offense score: {float(row.get('pivot_offense_score', 0.0)):.2f}")
+            print(f"  Type utility score: {float(row.get('pivot_type_utility_score', 0.0)):.2f}")
+            print(f"  Profile score: {float(row.get('pivot_profile_score', 0.0)):.2f}")
+            print(f"  Ability bonus (dataset): {pivot_ability_bonus:.2f}")
+            if abilities is not None:
+                print(f"  Ability bonus (from abilities): {ability_bonus_estimate:.2f}")
+            print("  Why:", ", ".join(_build_pivot_reasons(row)))
+
+        again = _input_yes_no("\nLook up another Pokemon?", default_yes=True)
+        if not again:
+            return
+
+
 def run_interactive_menu() -> int:
     def _pause_to_menu() -> bool:
         raw = _safe_input("\nPress Enter to return to menu...")
@@ -1120,9 +1275,10 @@ def run_interactive_menu() -> int:
         print("1. Team Generator (anchor-based)")
         print("2. Team Analyzer")
         print("3. Random Team Generator")
-        print("4. Exit")
+        print("4. Pokemon Info")
+        print("5. Exit")
 
-        raw_choice = _safe_input("Enter choice [1-4]: ")
+        raw_choice = _safe_input("Enter choice [1-5]: ")
         if raw_choice is None:
             print("\nInput interrupted. Exiting.")
             return 0
@@ -1143,10 +1299,15 @@ def run_interactive_menu() -> int:
                 print("\nInput interrupted. Exiting.")
                 return 0
         elif choice == "4":
+            _run_with_error_guard("Pokemon Info", interactive_pokemon_info)
+            if not _pause_to_menu():
+                print("\nInput interrupted. Exiting.")
+                return 0
+        elif choice == "5":
             print("Goodbye.")
             return 0
         else:
-            print("Invalid choice. Please enter 1, 2, 3, or 4.")
+            print("Invalid choice. Please enter 1, 2, 3, 4, or 5.")
 
 
 def run_cluster(args: argparse.Namespace) -> int:

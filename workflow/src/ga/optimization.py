@@ -747,17 +747,46 @@ def load_pokemon_data() -> pd.DataFrame:
             ability_name_col = 'name' if 'name' in abilities_df.columns else None
             ability_cols = [col for col in abilities_df.columns if 'ability' in col.lower()]
             if ability_name_col and ability_cols:
-                merged = df[['name']].merge(
-                    abilities_df[[ability_name_col] + ability_cols],
-                    left_on='name',
-                    right_on=ability_name_col,
-                    how='left',
+                base_names = df[['name']].copy()
+                base_names['_ability_key'] = base_names['name'].astype(str).str.strip().str.lower()
+                base_names['_ability_key_base'] = base_names['_ability_key'].str.split('-', n=1).str[0]
+
+                ability_subset = abilities_df[[ability_name_col] + ability_cols].copy()
+                ability_subset['_ability_key'] = (
+                    ability_subset[ability_name_col].astype(str).str.strip().str.lower()
                 )
+
+                exact_join = base_names.merge(
+                    ability_subset.drop(columns=[ability_name_col]),
+                    on='_ability_key',
+                    how='left',
+                    suffixes=('', '_exact'),
+                )
+
+                base_join = base_names.merge(
+                    ability_subset.drop(columns=[ability_name_col]),
+                    left_on='_ability_key_base',
+                    right_on='_ability_key',
+                    how='left',
+                    suffixes=('', '_base'),
+                )
+
+                merged = base_names.copy()
+                for col in ability_cols:
+                    merged[col] = exact_join[col].where(exact_join[col].notna(), base_join[col])
+
                 ability_text = merged[ability_cols].fillna('').astype(str).agg(' '.join, axis=1).str.lower()
                 ability_bonus += ability_text.str.contains('regenerator', regex=False).astype(float) * 0.15
                 ability_bonus += ability_text.str.contains('intimidate', regex=False).astype(float) * 0.12
+                ability_bonus += ability_text.str.contains('poison heal', regex=False).astype(float) * 0.10
                 ability_bonus += ability_text.str.contains('natural cure', regex=False).astype(float) * 0.08
-                ability_bonus += ability_text.str.contains('magic guard', regex=False).astype(float) * 0.06
+                ability_bonus += ability_text.str.contains('storm drain', regex=False).astype(float) * 0.05
+                ability_bonus += ability_text.str.contains('water absorb', regex=False).astype(float) * 0.04
+                ability_bonus += ability_text.str.contains('volt absorb', regex=False).astype(float) * 0.04
+                ability_bonus += ability_text.str.contains('sap sipper', regex=False).astype(float) * 0.04
+                ability_bonus += ability_text.str.contains('flash fire', regex=False).astype(float) * 0.04
+                ability_bonus += ability_text.str.contains('levitate', regex=False).astype(float) * 0.05
+                ability_bonus += ability_text.str.contains('magic guard', regex=False).astype(float) * 0.05
                 ability_bonus = ability_bonus.clip(upper=0.18)
 
         pivot_score = (

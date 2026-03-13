@@ -49,9 +49,25 @@ def load_features():
     
     df = pd.read_csv(features_csv)
     
-    # Extract 23D feature columns (skip metadata)
-    feature_cols = [col for col in df.columns if col.startswith('type_defense_') or 
-                   col in ['offensive_index', 'defensive_index', 'speed_percentile', 'physical_special_bias']]
+    role_shape_cols = [
+        "offensive_index",
+        "defensive_index",
+        "speed_percentile",
+        "physical_special_bias",
+        "physical_bulk",
+        "special_bulk",
+        "bulk_bias",
+        "offense_to_bulk_ratio",
+        "speed_to_bulk_ratio",
+        "special_bulk_percentile",
+        "physical_bulk_percentile",
+    ]
+
+    feature_cols = [
+        col
+        for col in df.columns
+        if col.startswith("type_defense_") or col in role_shape_cols
+    ]
     
     return df, feature_cols
 
@@ -147,6 +163,95 @@ def select_best_k(results):
     best_filtered_k = max(results['filtered'].keys(), key=lambda k: results['filtered'][k]['silhouette'])
     
     return best_full_k, best_filtered_k
+
+
+def assign_archetypes(df: pd.DataFrame, labels: np.ndarray) -> pd.DataFrame:
+    """
+    Assign interpretable archetype labels from clusters.
+
+    Uses a 2-step approach:
+    1) Cluster-level label from centroid summaries.
+    2) Row-level refinement rules for highly specific role profiles.
+    """
+    out = df.copy().reset_index(drop=True)
+    out["cluster"] = labels.astype(int)
+
+    summary_cols = ["offensive_index", "defensive_index", "speed", "physical_special_bias"]
+    cluster_summary = out.groupby("cluster")[summary_cols].mean().reset_index()
+
+    cluster_to_archetype = {}
+    for _, row in cluster_summary.iterrows():
+        offense = float(row["offensive_index"])
+        defense = float(row["defensive_index"])
+        speed = float(row["speed"])
+        phys_bias = float(row["physical_special_bias"])
+
+        if speed >= 105 and offense >= 190:
+            label = "Speed Sweeper"
+        elif speed >= 90 and offense >= 175:
+            label = "Fast Attacker"
+        elif offense >= 170 and phys_bias >= 0.25:
+            label = "Physical Attacker"
+        elif defense >= 235 and speed <= 85:
+            label = "Defensive Tank"
+        elif (
+            abs(phys_bias) <= 0.18
+            and 150 <= offense <= 215
+            and 185 <= defense <= 245
+            and 55 <= speed <= 105
+        ):
+            label = "Balanced All-Rounder"
+        else:
+            label = "Generalist"
+
+        cluster_to_archetype[int(row["cluster"])] = label
+
+    out["archetype"] = out["cluster"].map(cluster_to_archetype).fillna("Generalist")
+
+    # Refinement: promote clear role outliers to their expected role.
+    for idx, row in out.iterrows():
+        if (
+            row["defensive_index"] >= 255
+            and row["speed"] <= 75
+            and (row["special-defense"] >= 105 or row["defense"] >= 105)
+        ):
+            out.at[idx, "archetype"] = "Defensive Tank"
+        elif row["speed"] >= 125 and row["offensive_index"] >= 185:
+            out.at[idx, "archetype"] = "Speed Sweeper"
+        elif row["speed"] >= 100 and row["offensive_index"] >= 170:
+            out.at[idx, "archetype"] = "Fast Attacker"
+        elif (
+            (row["attack"] - row["special-attack"]) >= 25
+            and row["attack"] >= 95
+            and row["speed"] >= 65
+        ):
+            out.at[idx, "archetype"] = "Physical Attacker"
+        elif (
+            row["defensive_index"] >= 210
+            and row["offensive_index"] >= 150
+            and 70 <= row["speed"] <= 105
+            and abs(row["physical_special_bias"]) <= 0.25
+        ):
+            out.at[idx, "archetype"] = "Balanced All-Rounder"
+
+    return out
+
+
+def save_clustered_dataset(df: pd.DataFrame, labels: np.ndarray, output_dir: pathlib.Path):
+    """Save full clustered dataset used by GA and CLI."""
+    output_dir = pathlib.Path(output_dir)
+    data_dir = output_dir / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    clustered = assign_archetypes(df, labels)
+    csv_path = data_dir / "pokemon_with_clusters.csv"
+    clustered.to_csv(csv_path, index=False)
+
+    print(f"   ✓ data/pokemon_with_clusters.csv ({len(clustered)} rows)")
+    print("   Archetype distribution:")
+    for archetype, count in clustered["archetype"].value_counts().items():
+        pct = 100.0 * count / len(clustered)
+        print(f"      - {archetype:20s}: {count:3d} ({pct:5.1f}%)")
 
 
 def create_comparison_report(results, X_full_pca, X_filtered_pca, pca, scaler):
@@ -379,6 +484,12 @@ def main():
     # Save outputs
     output_dir = pathlib.Path(__file__).resolve().parents[3] / "reports" / "clustering_analysis"
     save_outputs(output_dir, results, scaler, pca, X_full_pca, X_filtered_pca)
+
+    best_full_k, _ = select_best_k(results)
+    best_labels_full = results['full'][best_full_k]['labels']
+
+    print("\n🧩 Assigning archetypes for GA/CLI dataset...")
+    save_clustered_dataset(df_full, best_labels_full, output_dir)
     
     # Generate visualizations
     print("\n≡ƒôê Creating visualizations...")
