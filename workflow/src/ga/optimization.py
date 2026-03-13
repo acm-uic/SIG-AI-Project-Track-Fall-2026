@@ -820,7 +820,11 @@ def load_pokemon_data() -> pd.DataFrame:
 
 if __name__ == "__main__":
     # Test GA with Config C
-    from ga_config import get_config_c
+    try:
+        from .config import get_config_c
+    except ImportError:
+        from src.ga.config import get_config_c
+    
     
     print("=" * 80)
     print("GENETIC ALGORITHM TEST RUN")
