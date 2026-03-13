@@ -544,6 +544,7 @@ class PokemonGA:
             }
             teams_data.append(team_dict)
         
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         snapshot_path = self.output_dir / f"generation_elite_{generation}.json"
         with open(snapshot_path, 'w') as f:
             json.dump(teams_data, f, indent=2)

@@ -24,7 +24,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.core.paths import reports_dir
 from src.ga import PokemonGA, load_pokemon_data
 from src.ga.config import get_config_a, get_config_b, get_config_c, get_config_random
 from src.ga.fitness import TYPE_NAMES
@@ -169,16 +168,10 @@ def _inject_theme() -> None:
         )
 
 
-def _error_log_dir() -> Path:
-    path = reports_dir() / "error_logs"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _write_error_log(operation: str, exc: Exception) -> Path:
+def _build_error_log(operation: str, exc: Exception) -> tuple[str, bytes]:
+    """Build error log content in memory; return (filename, bytes) for download."""
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = _error_log_dir() / f"streamlit_{operation}_{ts}.log"
-    details = [
+    details = "\n".join([
         f"Operation: {operation}",
         f"Timestamp: {ts}",
         f"ExceptionType: {type(exc).__name__}",
@@ -186,26 +179,33 @@ def _write_error_log(operation: str, exc: Exception) -> Path:
         "",
         "Traceback:",
         traceback.format_exc(),
-    ]
-    log_path.write_text("\n".join(details), encoding="utf-8")
-    return log_path
+    ])
+    filename = f"streamlit_{operation}_{ts}.log"
+    return filename, details.encode("utf-8")
 
 
-def _run_safe(operation: str, fn: Callable[[], Any]) -> tuple[bool, Any, str | None, Path | None]:
+def _run_safe(operation: str, fn: Callable[[], Any]) -> tuple[bool, Any, str | None, tuple[str, bytes] | None]:
     try:
         result = fn()
         return True, result, None, None
     except Exception as exc:  # noqa: BLE001
-        log_path = _write_error_log(operation, exc)
-        return False, None, str(exc), log_path
+        log_payload = _build_error_log(operation, exc)
+        return False, None, str(exc), log_payload
 
 
-def _friendly_failure(operation: str, message: str | None, log_path: Path | None) -> None:
+def _friendly_failure(operation: str, message: str | None, log_payload: tuple[str, bytes] | None) -> None:
     st.error(f"{operation} failed.")
     if message:
         st.caption(f"Reason: {message}")
-    if log_path:
-        st.caption(f"Diagnostic log: {log_path}")
+    if log_payload:
+        filename, content = log_payload
+        st.download_button(
+            label="Download Error Log",
+            data=content,
+            file_name=filename,
+            mime="text/plain",
+            key=f"dl_errlog_{filename}",
+        )
 
 
 def _config_from_name(name: str) -> dict[str, Any]:
@@ -307,7 +307,7 @@ def _format_breakdown(breakdown: dict[str, Any]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _render_analysis_panel(team_names: list[str], data_df: pd.DataFrame) -> None:
+def _render_analysis_panel(team_names: list[str], data_df: pd.DataFrame, key_suffix: str = "") -> None:
     report = analyze_team_by_names(team_names, data_df)
 
     c1, c2, c3 = st.columns(3)
@@ -358,6 +358,16 @@ def _render_analysis_panel(team_names: list[str], data_df: pd.DataFrame) -> None
         )
         st.dataframe(pd.DataFrame(pivot_candidates), use_container_width=True, hide_index=True)
 
+    report_json = json.dumps(report, indent=2, default=str).encode("utf-8")
+    st.download_button(
+        label="Download Analysis Report (JSON)",
+        data=report_json,
+        file_name="team_analysis.json",
+        mime="application/json",
+        key=f"dl_analysis{key_suffix}",
+        use_container_width=True,
+    )
+
 
 def _run_ga_workflow(
     config_name: str,
@@ -365,7 +375,6 @@ def _run_ga_workflow(
     generations: int,
     seed: int,
     top_n: int,
-    save_outputs: bool,
     locked_names: list[str],
     composition_name: str = "balanced",
     composition_weight: float = 0.20,
@@ -393,18 +402,11 @@ def _run_ga_workflow(
         config["fitness"]["pivot_weight"] = 0.18
         config["fitness"]["target_pivot_count"] = 3
 
-    output_dir = None
-    if save_outputs:
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = reports_dir() / "ga_results" / f"run_streamlit_{ts}"
-
     stdout_buffer = io.StringIO()
     with contextlib.redirect_stdout(stdout_buffer):
-        ga = PokemonGA(data_df, config, output_dir=output_dir, locked_pokemon=locked_names)
+        ga = PokemonGA(data_df, config, output_dir=None, locked_pokemon=locked_names)
         history_df = ga.run()
         best_teams = ga.get_best_teams(top_n)
-        if save_outputs and output_dir is not None:
-            ga.export_results(output_dir)
 
     top_teams_payload = []
     for rank, (team_df, fitness, breakdown) in enumerate(best_teams, start=1):
@@ -421,7 +423,6 @@ def _run_ga_workflow(
         "run_log": stdout_buffer.getvalue(),
         "history": history_df,
         "best_fitness": float(best_teams[0][1]) if best_teams else None,
-        "output_dir": str(output_dir) if output_dir else None,
         "top_teams": top_teams_payload,
         "config_used": config,
     }
@@ -431,9 +432,6 @@ def _render_ga_results(results: dict[str, Any], data_df: pd.DataFrame, include_a
     st.success("GA run completed successfully.")
     if results["best_fitness"] is not None:
         st.metric("Best Fitness", f"{results['best_fitness']:.4f}")
-
-    if results["output_dir"]:
-        st.caption(f"Output directory: {results['output_dir']}")
 
     history_df = results["history"]
     if not history_df.empty:
@@ -445,15 +443,26 @@ def _render_ga_results(results: dict[str, Any], data_df: pd.DataFrame, include_a
     st.subheader("Generated Team")
     for team in results["top_teams"]:
         with st.expander(f"Rank {team['rank']} | Fitness {team['fitness']:.4f}", expanded=team["rank"] == 1):
-            st.dataframe(_team_table(team["pokemon"]), use_container_width=True, hide_index=True)
+            team_table_df = _team_table(team["pokemon"])
+            st.dataframe(team_table_df, use_container_width=True, hide_index=True)
             breakdown_df = _format_breakdown(team["breakdown"])
             if not breakdown_df.empty:
                 st.dataframe(breakdown_df, use_container_width=True, hide_index=True)
 
+            team_csv = team_table_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="Download Team as CSV",
+                data=team_csv,
+                file_name=f"team_rank_{team['rank']}.csv",
+                mime="text/csv",
+                key=f"dl_team_{team['rank']}",
+                use_container_width=True,
+            )
+
             if include_analysis:
                 st.markdown("### Team Analyzer")
                 team_names = [p["name"] for p in team["pokemon"] if "name" in p]
-                _render_analysis_panel(team_names, data_df)
+                _render_analysis_panel(team_names, data_df, key_suffix=f"_rank{team['rank']}")
 
     with st.expander("Run Log"):
         st.code(results["run_log"] or "(no output)", language="text")
@@ -640,13 +649,6 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
             step=1,
             help="Reuse the same seed to reproduce results.",
         )
-    with c4:
-        save_outputs = st.checkbox(
-            "Save Artifacts",
-            value=False,
-            help="Store logs and run outputs for later review.",
-        )
-
     if st.button("Generate Team", type="primary", use_container_width=True):
         if not anchors:
             st.warning("Select at least one anchor Pokemon.")
@@ -661,7 +663,6 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
                     generations=int(generations),
                     seed=int(seed),
                     top_n=int(top_n),
-                    save_outputs=save_outputs,
                     locked_names=anchors,
                     composition_name=composition_name,
                     composition_weight=float(composition_weight),
@@ -745,13 +746,7 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
             key="rand_seed",
             help="Lock seed for repeatable random results.",
         )
-    with c2:
-        save_outputs = st.checkbox(
-            "Save Artifacts",
-            value=False,
-            key="rand_save",
-            help="Store outputs and logs to inspect this run later.",
-        )
+
 
     if st.button("Generate Random Team", type="primary", use_container_width=True):
         locked = [] if anchor == "(None)" else [anchor]
@@ -764,7 +759,6 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
                     generations=int(generations),
                     seed=int(seed),
                     top_n=int(top_n),
-                    save_outputs=save_outputs,
                     locked_names=locked,
                     composition_name="balanced",
                     composition_weight=0.20,
@@ -803,7 +797,7 @@ def main() -> None:
             help="Choose what you want to do: build a team, analyze a team, or explore random lineups.",
         )
         st.markdown("---")
-        st.caption("Errors are logged to `reports/error_logs/` for debugging.")
+        st.caption("If something goes wrong, a Download Error Log button will appear.")
 
     if mode == "Team Generator":
         _render_team_generator_mode(data_df)
