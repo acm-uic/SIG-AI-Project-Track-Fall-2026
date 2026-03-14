@@ -1,9 +1,8 @@
 {
   "config": {
-    "name": "FinalValidation",
     "population": {
-      "size": 40,
-      "generations": 30,
+      "size": 120,
+      "generations": 200,
       "tournament_k": 3,
       "elitism": 5
     },
@@ -11,104 +10,239 @@
       "base_stats_weight": 0.4,
       "type_coverage_weight": 0.3,
       "synergy_weight": 0.15,
-      "diversity_weight": 0.15,
+      "diversity_weight": 0.3,
       "imbalance_lambda": 0.2,
-      "weakness_lambda": 0.0
+      "weakness_lambda": 0.01,
+      "max_shared_weakness_members": 2,
+      "max_total_shared_weakness": 8,
+      "bst_cap": 3300,
+      "bst_penalty_weight": 2.0,
+      "pivot_weight": 0.0,
+      "target_pivot_count": 0,
+      "pivot_threshold": 0.62
     },
     "initialization": {
-      "method": "inverse"
+      "method": "sqrt_weighted"
     },
     "mutation": {
       "rate": 0.15,
       "weighted": true
     },
     "crossover": {
-      "rate": 0.8
+      "rate": 0.8,
+      "type": "two_point"
     },
-    "random_seed": 42
+    "random_seed": 42,
+    "name": "FinalValidation"
   },
   "seeds": [
     42,
-    43
+    43,
+    44,
+    45,
+    46
   ],
   "results_per_seed": [
     {
       "seed": 42,
-      "best_fitness": 0.7501518288766216,
+      "best_fitness": 0.8998795693011346,
       "fitness_breakdown": {
-        "total": 0.7501518288766216,
-        "base_strength": 0.5250020768431984,
-        "type_coverage": 0.9444444444444444,
-        "synergy": 0.7491548024104293,
-        "entropy_bonus": 0.15,
+        "total": 0.8998795693011346,
+        "base_strength": 0.5352441841548723,
+        "type_coverage": 1.0,
+        "synergy": 0.7311385635204962,
+        "entropy_bonus": 0.3,
         "imbalance_penalty": -0.005555555555555556,
-        "weakness_penalty": 0.0,
-        "base_fitness": 0.6057073844321771
+        "weakness_penalty": -0.01833333333333333,
+        "bst_penalty": 0.0,
+        "rarity_bonus": 0.0,
+        "composition_bonus": 0.0,
+        "pivot_bonus": 0.0,
+        "base_fitness": 0.6237684581900234
       },
       "team_names": [
-        "ampharos",
-        "dhelmise",
-        "gliscor",
-        "tyranitar",
-        "solgaleo",
-        "flutter-mane"
+        "omastar",
+        "shuckle",
+        "decidueye",
+        "zapdos",
+        "excadrill",
+        "koraidon"
       ],
       "types_in_team": [
-        "electric",
-        "ghost",
-        "ground",
         "rock",
-        "psychic"
+        "bug",
+        "grass",
+        "electric",
+        "ground",
+        "fighting"
       ],
-      "num_types": 5,
-      "base_strength_component": 0.5250020768431984,
-      "mean_offensive_index": 202.66666666666666,
-      "mean_defensive_index": 237.41666666666666,
+      "num_types": 6,
+      "base_strength_component": 0.5352441841548723,
+      "mean_offensive_index": 170.33333333333334,
+      "mean_defensive_index": 263.1666666666667,
       "consistency_check": "PASS"
     },
     {
       "seed": 43,
-      "best_fitness": 0.7577671239649802,
+      "best_fitness": 0.9053484573403892,
       "fitness_breakdown": {
-        "total": 0.7577671239649802,
-        "base_strength": 0.6479885773624092,
-        "type_coverage": 0.8333333333333334,
-        "synergy": 0.6941816571704803,
-        "entropy_bonus": 0.15,
+        "total": 0.9053484573403892,
+        "base_strength": 0.5008833577354808,
+        "type_coverage": 1.0,
+        "synergy": 0.8388563171968678,
+        "entropy_bonus": 0.3,
         "imbalance_penalty": -0.005555555555555556,
-        "weakness_penalty": 0.0,
-        "base_fitness": 0.6133226795205358
+        "weakness_penalty": -0.015277777777777776,
+        "bst_penalty": 0.0,
+        "rarity_bonus": 0.0,
+        "composition_bonus": 0.0,
+        "pivot_bonus": 0.0,
+        "base_fitness": 0.6261817906737225
       },
       "team_names": [
-        "honchkrow",
-        "zekrom",
-        "xerneas",
-        "kyogre",
-        "stakataka",
-        "oranguru"
+        "cofagrigus",
+        "koraidon-limited-build",
+        "rotom-fan",
+        "nihilego",
+        "tsareena",
+        "rhyperior"
       ],
       "types_in_team": [
-        "dark",
-        "dragon",
-        "fairy",
-        "water",
+        "ghost",
+        "fighting",
+        "electric",
         "rock",
-        "normal"
+        "grass",
+        "ground"
       ],
       "num_types": 6,
-      "base_strength_component": 0.6479885773624092,
-      "mean_offensive_index": 224.33333333333334,
-      "mean_defensive_index": 256.25,
+      "base_strength_component": 0.5008833577354808,
+      "mean_offensive_index": 180.0,
+      "mean_defensive_index": 248.33333333333334,
+      "consistency_check": "PASS"
+    },
+    {
+      "seed": 44,
+      "best_fitness": 0.8931627743292889,
+      "fitness_breakdown": {
+        "total": 0.8931627743292889,
+        "base_strength": 0.47778151944037744,
+        "type_coverage": 1.0,
+        "synergy": 0.8284825918357339,
+        "entropy_bonus": 0.3,
+        "imbalance_penalty": -0.005555555555555556,
+        "weakness_penalty": -0.016666666666666663,
+        "bst_penalty": 0.0,
+        "rarity_bonus": 0.0,
+        "composition_bonus": 0.0,
+        "pivot_bonus": 0.0,
+        "base_fitness": 0.615384996551511
+      },
+      "team_names": [
+        "ferrothorn",
+        "gengar",
+        "armarouge",
+        "miraidon-drive-mode",
+        "rhyperior",
+        "great-tusk"
+      ],
+      "types_in_team": [
+        "grass",
+        "ghost",
+        "fire",
+        "electric",
+        "ground"
+      ],
+      "num_types": 5,
+      "base_strength_component": 0.47778151944037744,
+      "mean_offensive_index": 187.83333333333334,
+      "mean_defensive_index": 236.75,
+      "consistency_check": "PASS"
+    },
+    {
+      "seed": 45,
+      "best_fitness": 0.9071106406377281,
+      "fitness_breakdown": {
+        "total": 0.9071106406377281,
+        "base_strength": 0.5338981617048967,
+        "type_coverage": 1.0,
+        "synergy": 0.7625647285940178,
+        "entropy_bonus": 0.3,
+        "imbalance_penalty": -0.005555555555555556,
+        "weakness_penalty": -0.015277777777777772,
+        "bst_penalty": 0.0,
+        "rarity_bonus": 0.0,
+        "composition_bonus": 0.0,
+        "pivot_bonus": 0.0,
+        "base_fitness": 0.6279439739710613
+      },
+      "team_names": [
+        "flutter-mane",
+        "deoxys-defense",
+        "ogerpon-hearthflame-mask",
+        "gallade",
+        "probopass",
+        "rhyperior"
+      ],
+      "types_in_team": [
+        "ghost",
+        "psychic",
+        "grass",
+        "rock",
+        "ground"
+      ],
+      "num_types": 5,
+      "base_strength_component": 0.5338981617048967,
+      "mean_offensive_index": 170.83333333333334,
+      "mean_defensive_index": 260.6666666666667,
+      "consistency_check": "PASS"
+    },
+    {
+      "seed": 46,
+      "best_fitness": 0.8905917974366455,
+      "fitness_breakdown": {
+        "total": 0.8905917974366455,
+        "base_strength": 0.463284691719538,
+        "type_coverage": 1.0,
+        "synergy": 0.8425935457329428,
+        "entropy_bonus": 0.3,
+        "imbalance_penalty": -0.005555555555555556,
+        "weakness_penalty": -0.01555555555555555,
+        "bst_penalty": 0.0,
+        "rarity_bonus": 0.0,
+        "composition_bonus": 0.0,
+        "pivot_bonus": 0.0,
+        "base_fitness": 0.6117029085477567
+      },
+      "team_names": [
+        "keldeo-ordinary",
+        "mantine",
+        "rhyperior",
+        "sandslash-alola",
+        "umbreon",
+        "miraidon-glide-mode"
+      ],
+      "types_in_team": [
+        "water",
+        "ground",
+        "ice",
+        "dark",
+        "electric"
+      ],
+      "num_types": 5,
+      "base_strength_component": 0.463284691719538,
+      "mean_offensive_index": 164.33333333333334,
+      "mean_defensive_index": 249.25,
       "consistency_check": "PASS"
     }
   ],
   "summary": {
-    "mean_best_fitness": 0.7539594764208009,
-    "std_best_fitness": 0.003807647544179338,
-    "cv_best_fitness": 0.5050201852034563,
-    "mean_base_strength": 0.5864953271028038,
-    "mean_num_types": 5.5,
+    "mean_best_fitness": 0.8992186478090373,
+    "std_best_fitness": 0.006502170158767463,
+    "cv_best_fitness": 0.7230911163386258,
+    "mean_base_strength": 0.5022183829510329,
+    "mean_num_types": 5.4,
     "consistency_check": "PASS",
-    "total_runtime_seconds": 8.750112056732178
+    "total_runtime_seconds": 420.52457761764526
   }
 }

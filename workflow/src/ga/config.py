@@ -33,8 +33,10 @@ def get_base_config():
             "weakness_lambda": 0.01,       # Keep slight pressure; avoid over-penalizing search
 
             # Final-team post-filter guardrails (applied when exporting top teams)
-            "max_shared_weakness_members": 2,   # Reject teams with >=3 weak to any single type
-            "max_total_shared_weakness": 8,     # Optional aggregate cap across all weak types
+            # Uses net exposure = weak_count - resist_count per type.
+            # e.g. 3 fire-weak + 1 fire-resist = net 2 -> passes at threshold 2.
+            "max_shared_weakness_members": 2,   # Reject if net unmitigated exposure > 2 for any type
+            "max_total_shared_weakness": 8,     # Optional aggregate net cap across all types
             
             # BST cap (competitive tier constraint)
             "bst_cap": 3300,               # Total team BST limit (~550 avg = OU tier)

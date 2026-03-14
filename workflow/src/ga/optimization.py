@@ -599,20 +599,48 @@ class PokemonGA:
         return counts
 
 
+    def _team_shared_resist_counts(self, team_df: pd.DataFrame) -> Dict[str, int]:
+        """Count team members that resist each attacking type (effectiveness < 1.0)."""
+        counts: Dict[str, int] = {}
+        for type_name in TYPE_NAMES:
+            resist_count = 0
+            for _, row in team_df.iterrows():
+                defending_types = [row['type1']]
+                if pd.notna(row.get('type2')) and row.get('type2'):
+                    defending_types.append(row['type2'])
+
+                effectiveness = get_type_effectiveness(type_name, defending_types)
+                if effectiveness < 1.0:
+                    resist_count += 1
+
+            if resist_count > 0:
+                counts[type_name] = resist_count
+        return counts
+
+
     def _team_max_shared_weakness(self, team_df: pd.DataFrame) -> int:
-        """Maximum number of team members weak to the same attacking type."""
-        counts = self._team_shared_weakness_counts(team_df)
-        return int(max(counts.values(), default=0))
+        """Maximum net unmitigated exposure across all types (weak_count - resist_count)."""
+        weak_counts = self._team_shared_weakness_counts(team_df)
+        resist_counts = self._team_shared_resist_counts(team_df)
+        net = {t: weak_counts[t] - resist_counts.get(t, 0) for t in weak_counts}
+        return int(max((v for v in net.values() if v > 0), default=0))
 
 
     def _team_total_shared_weakness(self, team_df: pd.DataFrame) -> int:
-        """Aggregate count across all team type weaknesses."""
-        counts = self._team_shared_weakness_counts(team_df)
-        return int(sum(counts.values()))
+        """Aggregate net unmitigated exposure across all types."""
+        weak_counts = self._team_shared_weakness_counts(team_df)
+        resist_counts = self._team_shared_resist_counts(team_df)
+        net = {t: weak_counts[t] - resist_counts.get(t, 0) for t in weak_counts}
+        return int(sum(v for v in net.values() if v > 0))
 
 
     def _passes_shared_weakness_filter(self, team_df: pd.DataFrame) -> bool:
-        """Apply optional weakness guardrails from config['fitness']."""
+        """Apply optional weakness guardrails from config['fitness'].
+
+        Uses net exposure (weak_count - resist_count) per type, so resists
+        on the team offset shared weaknesses before the threshold is applied.
+        Example: 3 fire-weak + 1 fire-resist = net 2 -> passes at threshold 2.
+        """
         fitness_cfg = self.config.get('fitness', {})
         max_shared_members = int(fitness_cfg.get('max_shared_weakness_members', 0) or 0)
         max_total_shared = int(fitness_cfg.get('max_total_shared_weakness', 0) or 0)
@@ -620,12 +648,12 @@ class PokemonGA:
         if max_shared_members <= 0 and max_total_shared <= 0:
             return True
 
-        max_shared = self._team_max_shared_weakness(team_df)
-        total_shared = self._team_total_shared_weakness(team_df)
+        max_net = self._team_max_shared_weakness(team_df)
+        total_net = self._team_total_shared_weakness(team_df)
 
-        if max_shared_members > 0 and max_shared > max_shared_members:
+        if max_shared_members > 0 and max_net > max_shared_members:
             return False
-        if max_total_shared > 0 and total_shared > max_total_shared:
+        if max_total_shared > 0 and total_net > max_total_shared:
             return False
         return True
 
@@ -645,19 +673,23 @@ class PokemonGA:
         sorted_indices = np.argsort([score for score, _ in self.fitness_scores])[::-1]
 
         best_teams = []
+        fallback_teams = []
         for i in sorted_indices:
             team = self.population[i]
-            if not self._passes_shared_weakness_filter(team):
-                continue
             fitness, breakdown = self.fitness_scores[i]
+            if not self._passes_shared_weakness_filter(team):
+                fallback_teams.append((team, fitness, breakdown))
+                continue
             best_teams.append((team, fitness, breakdown))
             if len(best_teams) >= n:
                 break
 
         if len(best_teams) < n:
+            needed = n - len(best_teams)
+            best_teams.extend(fallback_teams[:needed])
             print(
-                f"   [WARN] Weakness post-filter returned {len(best_teams)}/{n} teams. "
-                "Relax max_shared_weakness_members or max_total_shared_weakness if needed."
+                f"   [WARN] Weakness post-filter returned {len(best_teams) - needed}/{n} fully compliant teams; "
+                f"filled remaining {needed} slot(s) with highest-fitness fallback teams."
             )
 
         return best_teams

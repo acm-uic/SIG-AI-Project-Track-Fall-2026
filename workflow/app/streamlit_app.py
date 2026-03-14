@@ -404,10 +404,16 @@ def _run_ga_workflow(
         config["fitness"]["target_pivot_count"] = 3
 
     stdout_buffer = io.StringIO()
-    with contextlib.redirect_stdout(stdout_buffer):
+    stderr_buffer = io.StringIO()
+    with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
         ga = PokemonGA(data_df, config, output_dir=None, locked_pokemon=locked_names)
         history_df = ga.run()
         best_teams = ga.get_best_teams(top_n)
+
+    stderr_output = stderr_buffer.getvalue()
+    run_log = stdout_buffer.getvalue()
+    if stderr_output:
+        run_log += "\n--- warnings ---\n" + stderr_output
 
     top_teams_payload = []
     for rank, (team_df, fitness, breakdown) in enumerate(best_teams, start=1):
@@ -421,7 +427,7 @@ def _run_ga_workflow(
         )
 
     return {
-        "run_log": stdout_buffer.getvalue(),
+        "run_log": run_log,
         "history": history_df,
         "best_fitness": float(best_teams[0][1]) if best_teams else None,
         "top_teams": top_teams_payload,
