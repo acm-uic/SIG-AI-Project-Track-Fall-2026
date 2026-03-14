@@ -1,10 +1,7 @@
 """
 Phase 5: Final Validation
 ==========================
-Quick check with recommended config:
-- Inverse initialization
-- Entropy enabled
-- Weakness penalty = 0
+Quick check with the current recommended Config C defaults.
 
 Goals:
 - Verify best fitness
@@ -21,6 +18,9 @@ import time
 import copy
 import argparse
 import io
+import importlib
+import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import pandas as pd
 
@@ -30,13 +30,33 @@ if sys.stdout.encoding != 'utf-8':
 if sys.stderr.encoding != 'utf-8':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
-# Add parent directory to path
-proj_root = Path(__file__).parent.parent.parent
-sys.path.append(str(proj_root))
-sys.path.append(str(proj_root / "src" / "models"))
+# Import project modules
+def _find_proj_root(start: Path) -> Path:
+    """Walk upward until we find the project root (contains src/ga)."""
+    for candidate in [start] + list(start.parents):
+        if (candidate / "src" / "ga").exists():
+            return candidate
+    raise RuntimeError("Could not locate project root containing src/ga")
 
-from src.models.ga_optimization import PokemonGA, load_pokemon_data
-from src.models.ga_fitness import evaluate_fitness
+
+PROJ_ROOT = _find_proj_root(Path(__file__).resolve().parent)
+sys.path.append(str(PROJ_ROOT))
+
+try:
+    # Current module layout
+    from src.ga.optimization import PokemonGA, load_pokemon_data
+    from src.ga.config import get_config_c
+    from src.ga.fitness import evaluate_fitness
+except ModuleNotFoundError:
+    # Backward compatibility with older ablation package layout
+    legacy_optimization = importlib.import_module('src.models.ga_optimization')
+    legacy_config = importlib.import_module('src.models.ga_config')
+    legacy_fitness = importlib.import_module('src.models.ga_fitness')
+
+    PokemonGA = legacy_optimization.PokemonGA
+    load_pokemon_data = legacy_optimization.load_pokemon_data
+    get_config_c = legacy_config.get_config_c
+    evaluate_fitness = legacy_fitness.evaluate_fitness
 
 # ============================================================================
 # CONSTANTS
@@ -49,35 +69,12 @@ FITNESS_CONSISTENCY_TOL = 1e-6
 # ============================================================================
 
 def build_config(population_size=60, generations=60):
-    """Build the recommended configuration based on Phase 2 findings."""
-    return {
-        "name": "FinalValidation",
-        "population": {
-            "size": population_size,
-            "generations": generations,
-            "tournament_k": 3,
-            "elitism": 5
-        },
-        "fitness": {
-            "base_stats_weight": 0.40,
-            "type_coverage_weight": 0.30,
-            "synergy_weight": 0.15,
-            "diversity_weight": 0.15,
-            "imbalance_lambda": 0.20,
-            "weakness_lambda": 0.0,  # <-- KEY: Set to 0 (Phase 2 found this harmful)
-        },
-        "initialization": {
-            "method": "inverse",  # <-- KEY: Inverse init is best (0.7508 vs 0.7178)
-        },
-        "mutation": {
-            "rate": 0.15,
-            "weighted": True  # Enable archetype-aware mutation
-        },
-        "crossover": {
-            "rate": 0.80,
-        },
-        "random_seed": 42  # Will be overridden per run
-    }
+    """Build validation config from the live recommended Config C defaults."""
+    config = get_config_c()
+    config['name'] = 'FinalValidation'
+    config['population']['size'] = population_size
+    config['population']['generations'] = generations
+    return config
 
 # ============================================================================
 # VALIDATION RUNNER
@@ -125,6 +122,12 @@ def run_validation_with_seed(seed, pokemon_df, config):
         'consistency_check': 'PASS',
     }
 
+
+def _run_single_seed(config_template, seed):
+    """Run one validation seed in a separate process for Windows-safe multiprocessing."""
+    pokemon_df = load_pokemon_data()
+    return run_validation_with_seed(seed, pokemon_df, config_template)
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -134,6 +137,12 @@ def main():
     parser.add_argument("--population", type=int, default=60)
     parser.add_argument("--generations", type=int, default=60)
     parser.add_argument("--seeds", type=int, default=2)
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        default=1,
+        help="Parallel workers for seed-level multiprocessing (1 = serial)",
+    )
     args = parser.parse_args()
 
     print("=" * 80)
@@ -154,6 +163,10 @@ def main():
     print(f"  Diversity Weight: {config['fitness']['diversity_weight']}")
     print(f"  Population Size: {config['population']['size']}")
     print(f"  Generations: {config['population']['generations']}")
+    if args.max_workers > 1:
+        print(f"  Parallel Workers: {args.max_workers} (cpu_count={os.cpu_count()})")
+    else:
+        print("  Parallel Workers: serial mode")
     print()
     
     # Run across seeds for quick stability check
@@ -163,20 +176,43 @@ def main():
     
     start_time = time.time()
     
-    for i, seed in enumerate(seeds):
-        print(f"[{i+1}/{len(seeds)}] Running seed {seed}...")
-        seed_start = time.time()
-        
-        result = run_validation_with_seed(seed, pokemon_df, config)
-        results.append(result)
-        best_fitnesses.append(result['best_fitness'])
-        
-        elapsed = time.time() - seed_start
-        print(f"  ✓ Best Fitness: {result['best_fitness']:.4f}")
-        print(f"    Types in team: {result['types_in_team']}")
-        print(f"    Base strength component: {result['base_strength_component']:.4f}")
-        print(f"    Runtime: {elapsed:.1f}s")
-        print()
+    if args.max_workers <= 1:
+        for i, seed in enumerate(seeds):
+            print(f"[{i+1}/{len(seeds)}] Running seed {seed}...")
+            seed_start = time.time()
+
+            result = run_validation_with_seed(seed, pokemon_df, config)
+            results.append(result)
+            best_fitnesses.append(result['best_fitness'])
+
+            elapsed = time.time() - seed_start
+            print(f"  ✓ Best Fitness: {result['best_fitness']:.4f}")
+            print(f"    Types in team: {result['types_in_team']}")
+            print(f"    Base strength component: {result['base_strength_component']:.4f}")
+            print(f"    Runtime: {elapsed:.1f}s")
+            print()
+    else:
+        print(f"Running {len(seeds)} seeds in parallel...")
+        with ProcessPoolExecutor(max_workers=args.max_workers) as executor:
+            futures = {
+                executor.submit(_run_single_seed, config, seed): seed
+                for seed in seeds
+            }
+            completed = 0
+            for future in as_completed(futures):
+                seed = futures[future]
+                result = future.result()
+                results.append(result)
+                best_fitnesses.append(result['best_fitness'])
+                completed += 1
+
+                print(f"[{completed}/{len(seeds)}] Finished seed {seed}")
+                print(f"  ✓ Best Fitness: {result['best_fitness']:.4f}")
+                print(f"    Types in team: {result['types_in_team']}")
+                print(f"    Base strength component: {result['base_strength_component']:.4f}")
+                print()
+
+        results.sort(key=lambda item: item['seed'])
     
     total_elapsed = time.time() - start_time
     
