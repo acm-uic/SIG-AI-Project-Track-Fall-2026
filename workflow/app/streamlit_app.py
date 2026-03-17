@@ -858,12 +858,15 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
             step=1,
             help="Reuse the same seed to reproduce results.",
         )
+    # Informative note for user expectation
+    st.caption(f"This process may take up to 1-2 minutes for large populations/generations. Please wait for results to appear. (Running {generations} generations.)")
+
     if st.button("Generate Team", type="primary", use_container_width=True):
         if not anchors:
             st.warning("Select at least one anchor Pokemon.")
             return
 
-        with st.spinner("Optimizing team..."):
+        with st.spinner(f"Optimizing team (running {generations} generations)..."):
             ok, payload, msg, log_path = _run_safe(
                 "team_generator",
                 lambda: _run_ga_workflow(
