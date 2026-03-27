@@ -1,10 +1,13 @@
-# Legacy Area
+# Legacy Directory
 
-This folder preserves previous CLI/script and legacy source workflows.
+This directory contains scripts and code from earlier phases of the project. These are preserved for reference, reproducibility, and to document the project's evolution.
 
-Moved during Streamlit-first transition:
-- `Proj1/scripts/*` -> `Proj1/legacy/scripts/*`
-- Legacy source modules -> `Proj1/legacy/src/*`
+## Contents
+- **Old Scripts**: Early versions of data processing, GA, or analysis scripts.
+- **Deprecated Workflows**: Approaches or experiments that were replaced or improved upon.
 
-Use this folder as historical reference while re-optimizing GA/GMM.
-Active runtime code should live outside `legacy/`.
+## How to Use
+- Reference legacy scripts to understand the project's development history.
+- Use as a resource for troubleshooting or for ideas in future work.
+
+Legacy code is not actively maintained but is kept for transparency and historical context.

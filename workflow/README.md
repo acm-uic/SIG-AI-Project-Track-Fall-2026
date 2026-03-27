@@ -112,3 +112,28 @@ See `scripts/README.md` for categorized script paths:
 - `scripts/analysis/`
 - `scripts/utils/`
 
+# Workflow Directory
+
+This directory contains the core code, data, and research assets for the Pokémon Team Optimization project.
+
+## Structure & Purpose
+- **app/**: User-facing Streamlit frontend and FastAPI backend for interactive team generation, analysis, and data serving.
+- **data/**: All datasets, engineered features, and clustering results used for GA and ML workflows.
+- **legacy/**: Scripts and code from earlier project phases, preserved for reproducibility and reference.
+- **reports/**: Step-by-step results, analysis, and research deliverables for every experiment and workflow.
+- **scripts/**: Automation, validation, and analysis scripts for running experiments and checking results.
+- **src/**: Core genetic algorithm engine, fitness functions, and supporting modules.
+
+## Project Workflow
+1. **Data Preparation**: Raw Pokémon data is cleaned and enhanced with engineered features and clustering (see `data/`).
+2. **GA Execution**: The genetic algorithm (in `src/ga/`) generates diverse, high-fitness teams, exporting generation snapshots for downstream analysis.
+3. **Role Discovery**: Scripts in `legacy/scripts/` and `src/` analyze GA teams to discover competitive roles using move-based heuristics.
+4. **Reporting**: All results, metrics, and artifacts are saved in `reports/` for transparency and reproducibility.
+
+## Technical Highlights
+- Modular, research-grade codebase with clear separation of concerns.
+- All experiments and results are reproducible and documented.
+- Designed for both research and practical deployment.
+
+For a step-by-step breakdown of experiments and findings, see [`reports/`](reports/).
+

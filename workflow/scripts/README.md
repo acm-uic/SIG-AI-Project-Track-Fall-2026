@@ -1,8 +1,15 @@
-# Scripts (Active)
+# Scripts Directory
 
-This folder is reserved for active app entrypoints.
+This directory contains automation, validation, and analysis scripts for running experiments and checking results.
 
-Legacy CLI and workflow scripts were moved to `Proj1/legacy/scripts/` as part of the Streamlit-first transition.
+## Contents
+- **Experiment Automation**: Scripts to run GA experiments, ablation studies, or batch analyses.
+- **Validation Tools**: Scripts to check data integrity, team legality, or result consistency.
+- **Analysis Utilities**: Helper scripts for plotting, metrics calculation, or report generation.
 
-For now, use the Streamlit app entrypoint at:
-- `Proj1/app/streamlit_app.py`
+## How to Use
+- Use automation scripts to streamline repetitive tasks.
+- Run validation tools before and after experiments to ensure data quality.
+- Leverage analysis utilities for deeper insights and visualizations.
+
+Scripts are modular and documented for easy adaptation to new experiments.
