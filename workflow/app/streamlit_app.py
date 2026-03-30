@@ -1000,6 +1000,7 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
+
     with st.sidebar:
         st.header("Mode")
         mode = st.radio(
@@ -1010,6 +1011,11 @@ def main() -> None:
         )
         st.markdown("---")
         st.caption("If something goes wrong, a Download Error Log button will appear.")
+        st.markdown("---")
+        st.markdown(
+            '<a href="https://github.com/acm-uic/SIG-AI-Project-Track-Fall-2026" target="_blank"><button style="width:100%;padding:0.5em 0.8em;font-size:1.1em;background:#3B82F6;color:white;border:none;border-radius:8px;cursor:pointer;">Repo Here</button></a>',
+            unsafe_allow_html=True,
+        )
 
     if mode == "Team Generator":
         _render_team_generator_mode(data_df)
