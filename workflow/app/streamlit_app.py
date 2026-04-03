@@ -881,6 +881,10 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
             "Refresh Process",
             "After you press Generate Team, check Job Status & Latest Result at the bottom. Use Refresh Job Status there to poll progress. While one generation is queued/running, starting another is blocked.",
         )
+        _guide_section(
+            "Team Diversity Note",
+            "Lower population/generation settings are faster but can return repeated top teams. If your top teams look too similar, increase either Population or Generations.",
+        )
 
     names = sorted(data_df["name"].astype(str).tolist())
     style_labels = {
@@ -938,7 +942,8 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
             index=2,
             help="Named profiles replace A/B/C. 'Full Balance' is recommended for most users.",
         )
-        top_n = st.slider("Top Teams to Show", min_value=1, max_value=5, value=3, step=1)
+        top_n = st.slider("Top Teams to Show", min_value=1, max_value=5, value=1, step=1)
+        st.caption("If top teams repeat at fast settings, increase Population or Generations for more diversity.")
         
 
     st.markdown("#### GA Runtime")
@@ -1027,6 +1032,10 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
             "Refresh Process",
             "After you press Generate Random Team, check Job Status & Latest Result at the bottom. Use Refresh Job Status there to poll progress. While one generation is queued/running, starting another is blocked.",
         )
+        _guide_section(
+            "Team Diversity Note",
+            "Lower population/generation settings are faster but can return repeated top teams. If your top teams look too similar, increase either Population or Generations.",
+        )
 
     names = sorted(data_df["name"].astype(str).tolist())
     anchor_options = ["(None)"] + names
@@ -1043,10 +1052,11 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
             "Top Teams to Show",
             min_value=1,
             max_value=5,
-            value=3,
+            value=1,
             step=1,
             help="Show multiple candidate teams to compare options.",
         )
+        st.caption("If top teams repeat at fast settings, increase Population or Generations for more diversity.")
     with col2:
         population = st.slider(
             "Population",
