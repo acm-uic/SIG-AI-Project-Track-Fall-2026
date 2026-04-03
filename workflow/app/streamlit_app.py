@@ -852,37 +852,37 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
         st.markdown(
                         """
 <h3>🧭 Team Builder Guide</h3>
-<p><strong>🟡 Anchor Pokemon</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🟡 Anchor Pokemon</span></strong><br>
 Guaranteed team members. If you always want Pikachu or Garchomp, select them as anchors and the system builds around them.</p>
-<p><strong>⚔️ Team Composition</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>⚔️ Team Composition</span></strong><br>
 Defines your team structure. Each Pokemon has a role. Some examples:</p>
 <ul>
     <li><strong>Tank</strong> - absorbs damage</li>
     <li><strong>Sweeper</strong> - finishes enemies</li>
     <li><strong>Generalist</strong> - flexible role</li>
 </ul>
-<p><strong>🎚️ Composition Strictness</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🎚️ Composition Strictness</span></strong><br>
 High - follows structure strictly<br>
 Low - allows creative, high-scoring picks</p>
-<p><strong>💪 Power Mode</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>💪 Power Mode</span></strong><br>
 Controls limits on high-stat teams.<br>
 Use <em>Standard</em> unless you want stricter or looser limits.</p>
-<p><strong>🧬 Optimization Profile</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🧬 Optimization Profile</span></strong><br>
 Changes how the algorithm explores teams.<br>
 <em>Full Balance</em> is best for beginners.</p>
-<p><strong>🔁 Population / Generations</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🔁 Population / Generations</span></strong><br>
 Population = teams per round<br>
 Generations = number of rounds<br>
 Higher = better results, slower runtime</p>
-<p><strong>🎲 Random Seed</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🎲 Random Seed</span></strong><br>
 Same seed = reproducible results<br>
 Different seed = new teams</p>
-<p><strong>🔄 Refresh Process</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🔄 Refresh Process</span></strong><br>
 After clicking <em>Generate Team</em>:<br>
 1. Check <strong>Job Status &amp; Latest Result</strong><br>
 2. Click <strong>Refresh Job Status</strong><br>
 Only one generation runs at a time</p>
-<p><strong>🌈 Team Diversity Tip</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🌈 Team Diversity Tip</span></strong><br>
 If teams look similar:<br>
 Increase <em>Population</em> or <em>Generations</em></p>
 """,
@@ -1019,23 +1019,23 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
         st.markdown(
             """
 <h3>🎲 Random Team Guide</h3>
-<p><strong>🟡 Optional Anchor</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🟡 Optional Anchor</span></strong><br>
 Pick one favorite Pokemon to force into the team, or leave it empty for a fully free random-style search.</p>
-<p><strong>🏆 Top Teams to Show</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🏆 Top Teams to Show</span></strong><br>
 Choose how many final candidates to compare. More options help if you want to choose by playstyle.</p>
-<p><strong>🔁 Population / Generations</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🔁 Population / Generations</span></strong><br>
 Population = teams tested per round<br>
 Generations = number of improvement rounds<br>
 Higher = better search quality, slower runtime</p>
-<p><strong>🎲 Random Seed</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🎲 Random Seed</span></strong><br>
 Same seed = reproducible random results<br>
 Different seed = fresh team outcomes</p>
-<p><strong>🔄 Refresh Process</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🔄 Refresh Process</span></strong><br>
 After clicking <em>Generate Random Team</em>:<br>
 1. Check <strong>Job Status &amp; Latest Result</strong> at the bottom<br>
 2. Click <strong>Refresh Job Status</strong><br>
 Only one generation runs at a time</p>
-<p><strong>🌈 Team Diversity Tip</strong><br>
+<p><strong><span style='font-size: 1.06rem;'>🌈 Team Diversity Tip</span></strong><br>
 If teams look too similar:<br>
 Increase <em>Population</em> or <em>Generations</em></p>
 """,
