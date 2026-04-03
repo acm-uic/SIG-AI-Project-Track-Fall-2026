@@ -1013,7 +1013,7 @@ Increase <em>Population</em> or <em>Generations</em></p>
             active = _get_active_job_record()
             active_id = active.job_id if active is not None else "unknown"
             st.warning(
-                f"A generation is already in progress (Job ID: {active_id}). Please wait for current run to end before starting another one."
+                f"A generation is already in progress (Job ID: {active_id}). Please wait for current run to end or use Refresh Job Status in the bottom section before starting another run."
             )
             return
 
@@ -1125,7 +1125,7 @@ Increase <em>Population</em> or <em>Generations</em></p>
             active = _get_active_job_record()
             active_id = active.job_id if active is not None else "unknown"
             st.warning(
-                f"A generation is already in progress (Job ID: {active_id}). Please use Refresh Job Status in the bottom section before starting another run."
+                f"A generation is already in progress (Job ID: {active_id}). Please wait for current run to end or use Refresh Job Status in the bottom section before starting another run."
             )
             return
 
