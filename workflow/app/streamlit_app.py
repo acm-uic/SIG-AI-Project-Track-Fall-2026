@@ -116,16 +116,16 @@ def _poll_ga_job_status() -> None:
 
     if record.status in {"queued", "running"}:
         refresh_clicked = False
-        with st.status("Generating team...", state="running", expanded=True):
-            st.write(f"Current job status: **{record.status}**")
-            st.write(f"Job ID: `{record.job_id}`")
-            last_checked = st.session_state.get(LAST_STATUS_CHECK_KEY)
-            if last_checked:
-                st.caption(f"Last checked: {last_checked}")
-            st.caption("You can keep using other app sections while this runs.")
-            if st.button("Refresh Job Status", key=f"refresh_job_{record.job_id}"):
-                refresh_clicked = True
-                st.session_state[LAST_STATUS_CHECK_KEY] = datetime.now().strftime("%H:%M:%S")
+        status_box = st.status("Generating team...", state="running", expanded=True)
+        status_box.write(f"Current job status: **{record.status}**")
+        status_box.write(f"Job ID: `{record.job_id}`")
+        last_checked = st.session_state.get(LAST_STATUS_CHECK_KEY)
+        if last_checked:
+            status_box.caption(f"Last checked: {last_checked}")
+        status_box.caption("You can keep using other app sections while this runs.")
+        if st.button("Refresh Job Status", key=f"refresh_job_{record.job_id}"):
+            refresh_clicked = True
+            st.session_state[LAST_STATUS_CHECK_KEY] = datetime.now().strftime("%H:%M:%S")
 
         # Re-poll immediately when user clicks refresh so completed/failed states
         # can be surfaced in this same interaction instead of waiting for another rerun.
