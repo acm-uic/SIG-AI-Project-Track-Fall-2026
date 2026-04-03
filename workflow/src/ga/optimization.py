@@ -851,20 +851,9 @@ def load_pokemon_data() -> pd.DataFrame:
                     ability_subset[ability_name_col].astype(str).str.strip().str.lower()
                 )
 
-                exact_join = base_names.merge(
-                    ability_subset.drop(columns=[ability_name_col]),
-                    on='_ability_key',
-                    how='left',
-                    suffixes=('', '_exact'),
-                )
-
-                base_join = base_names.merge(
-                    ability_subset.drop(columns=[ability_name_col]),
-                    left_on='_ability_key_base',
-                    right_on='_ability_key',
-                    how='left',
-                    suffixes=('', '_base'),
-                )
+                ability_lookup = ability_subset.set_index('_ability_key')[ability_cols]
+                exact_join = ability_lookup.reindex(base_names['_ability_key']).reset_index(drop=True)
+                base_join = ability_lookup.reindex(base_names['_ability_key_base']).reset_index(drop=True)
 
                 merged = base_names.copy()
                 for col in ability_cols:
