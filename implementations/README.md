@@ -1,12 +1,12 @@
 # Implementations
 
-This directory provides a thorough, plain-English explanation of each major implementation in the project. Each file here describes the motivation, design, and technical details of a specific module, algorithm, or workflow.
+This folder contains deeper writeups for the major pieces of the project. The goal is to explain the design choices, not just list setup steps.
 
-## Structure
-- **ga.md**: Genetic Algorithm engine, fitness functions, and optimization strategies.
-- **data.md**: Data engineering, feature creation, and clustering methods.
-- **frontend.md**: Streamlit UI design, user interaction, and API integration.
-- **backend.md**: FastAPI backend, endpoints, and business logic separation.
-- **ablation.md**: Ablation studies, experimental setups, and findings.
+## Guides
+- **ga.md**: the genetic algorithm and its fitness strategy
+- **data.md**: feature engineering, clustering, and data prep
+- **frontend.md**: the Streamlit experience and UI flow
+- **backend.md**: backend architecture and API design
+- **ablation.md**: experiment comparisons and findings
 
-Each file is written for recruiters, collaborators, and future maintainers to quickly understand the reasoning and mechanics behind each part of the project.
+Use these files when you want the full technical story behind the project.
