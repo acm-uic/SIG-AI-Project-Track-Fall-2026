@@ -938,7 +938,7 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
             index=2,
             help="Named profiles replace A/B/C. 'Full Balance' is recommended for most users.",
         )
-        top_n = st.slider("Top Teams to Show", min_value=1, max_value=5, value=1, step=1)
+        top_n = st.slider("Top Teams to Show", min_value=1, max_value=5, value=3, step=1)
         
 
     st.markdown("#### GA Runtime")
@@ -948,7 +948,7 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
             "Population",
             min_value=20,
             max_value=500,
-            value=150,
+            value=80,
             step=10,
             help="How many team candidates are tested per generation.",
         )
@@ -957,7 +957,7 @@ def _render_team_generator_mode(data_df: pd.DataFrame) -> None:
             "Generations",
             min_value=10,
             max_value=300,
-            value=80,
+            value=20,
             step=10,
             help="Optimization rounds. More rounds can improve quality but take longer.",
         )
@@ -1043,7 +1043,7 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
             "Top Teams to Show",
             min_value=1,
             max_value=5,
-            value=1,
+            value=3,
             step=1,
             help="Show multiple candidate teams to compare options.",
         )
@@ -1052,7 +1052,7 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
             "Population",
             min_value=20,
             max_value=500,
-            value=150,
+            value=80,
             step=10,
             key="rand_pop",
             help="More candidates can improve quality but increase runtime.",
@@ -1061,7 +1061,7 @@ def _render_random_team_mode(data_df: pd.DataFrame) -> None:
             "Generations",
             min_value=10,
             max_value=300,
-            value=80,
+            value=20,
             step=10,
             key="rand_gen",
             help="More rounds means more refinement of team candidates.",
