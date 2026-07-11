@@ -53,7 +53,7 @@ This document highlights the strongest engineering implementations from the proj
 - How queue states map to actionable UI messages.
 - Tradeoffs between immediate blocking output and delayed completion UX.
 
-## 4) Cross-Interface Architecture Alignment (Streamlit + CLI)
+## 4) Shared storage abstractions between CLI and Streamlit, eliminating duplicate persistence logic.
 
 ### What was built
 - Legacy CLI brought into alignment with Streamlit session save/view workflows.
